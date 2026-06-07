@@ -80,3 +80,9 @@ Tests currently cover only a small portion of the codebase but should remain pas
 
 When opening a PR, include a short summary of the changes and reference the main files modified. Show the output of the test command you ran. Keep commits focused and avoid unrelated formatting changes.
 
+
+## Local plans
+
+Local plans and design notes may exist under `plans/`.
+These files are intentionally gitignored.
+Use them as context when present, but never commit them.

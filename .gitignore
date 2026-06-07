@@ -13,3 +13,6 @@ webapp/db.sqlite3
 
 # Build artifacts
 movies_*.csv
+
+# Local-only plans and design docs
+plans/

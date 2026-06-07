@@ -19,12 +19,18 @@ def main():
     parser.add_argument(
         "-o", "--output", default="movies_10", help="Output filename without extension"
     )
+    parser.add_argument(
+        "--min-votes",
+        type=int,
+        default=1000,
+        help="Minimum votes to keep; use 0 to rely only on --percentage",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     reducer = MovieDatasetReducer()
-    reducer.reduce_dataset(args.percentage, args.output)
+    reducer.reduce_dataset(args.percentage, args.output, min_votes=args.min_votes)
 
 
 if __name__ == "__main__":

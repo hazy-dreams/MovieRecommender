@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -12,9 +13,19 @@ import django
 django.setup()
 
 import pandas as pd
+from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from movies.views import get_recommender, _load_recommender
+
+
+class RecommenderSettingsTest(SimpleTestCase):
+    """Tests for default recommender dataset configuration."""
+
+    def test_default_dataset_path_points_to_repo_root(self):
+        expected_path = Path(BASE_DIR) / "movies_10.csv"
+
+        self.assertEqual(Path(settings.RECOMMENDER_DATASET_PATH), expected_path)
 
 
 class GetRecommenderTest(SimpleTestCase):

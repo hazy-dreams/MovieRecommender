@@ -21,27 +21,15 @@ MovieRecommender/
 
 The current recommender is a learning-era content recommender: it builds a text "soup" from actors, director, and genres, vectorizes it, and ranks by cosine similarity. Treat it respectfully, but do not mistake it for the target architecture.
 
-## Local agent notes
-
-Local project-scoped notes, plans, tradeoff discussions, lessons learned, and handoff context may exist under `.local-notes/`.
-
-Rules:
-
-- Read relevant notes in `.local-notes/` before planning non-trivial work.
-- Never commit `.local-notes/`; it is intentionally gitignored.
-- Keep durable project context there instead of bloating global assistant memory.
-- If a note conflicts with tracked code or the user's latest instruction, the latest instruction and actual code win.
-
 ## Development setup
 
 Use Python 3.11+.
 
-Prefer a virtual environment. On this host, `uv` is available and is the least-annoying route:
+Install dependencies from the repository root. This creates a local `.venv` if
+needed and installs `requirements.txt`:
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+make setup
 ```
 
 The older `venv/` directory name and the common `.venv/` directory are both ignored. Do not commit virtualenvs, generated CSVs, caches, or local databases.
@@ -63,8 +51,7 @@ python recommender.py movies_10.csv "Inception"
 Run the Django app:
 
 ```bash
-cd webapp
-python manage.py runserver
+make run-web
 ```
 
 The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; by default it expects `movies_10.csv` in the repo root.
@@ -80,7 +67,7 @@ There are tests. Not many, but enough to be offended if ignored:
 Run from the repo root after installing dependencies:
 
 ```bash
-python -m pytest -q
+make test
 ```
 
 You can also run Django tests directly:
@@ -91,6 +78,12 @@ python manage.py test
 ```
 
 If `python -m pytest` fails with `ModuleNotFoundError: No module named 'django'`, that means the current environment does not have dependencies installed. Fix the environment; do not pretend the repo has no tests.
+
+For a quick Django configuration check, run:
+
+```bash
+make smoke
+```
 
 For docs-only or gitignore-only changes, it is acceptable to report that tests were not runnable because dependencies were missing, but still be explicit about the command and failure.
 

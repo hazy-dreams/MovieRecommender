@@ -43,9 +43,11 @@ is:
 1. Read `AGENTS.md`, the issue body, and relevant local code before editing.
 2. Implement only the accepted issue scope.
 3. Run `make test` from the repository root and capture the real output.
-4. Report changed files, verification command output, known blockers, and the
-   next suggested issue or review step.
-5. Hand off for Juno review, then GitHub PR/project state updates.
+4. If tests pass, create a PR ready for Juno review with changed files,
+   verification command output, blockers, and the next suggested issue or review
+   step.
+5. If tests cannot run or fail, do not create a review-ready PR; report the
+   blocker and stop for Juno intervention.
 
 `Examples:`
 

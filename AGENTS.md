@@ -139,10 +139,12 @@ Good near-term improvements are usually boring and valuable: stable movie IDs, b
 - Use GitHub Issues/Projects as the source of truth for roadmap and implementation tasks.
 - `Roadmap` means discussion/scoping/tradeoffs.
 - `Codex Ready` plus the `codex-ready` label means scoped, accepted, and verifiable.
-- Expected loop: GitHub issue to Codex implementation to `make test` output to Juno review to PR/project state update.
+- Expected loop: GitHub issue to Codex implementation to `make test` output to PR to Juno review to project state update.
+- Codex may create PRs for review, but only after the canonical tests actually run and pass.
+- If tests cannot run because dependencies, network, data, or tooling are unavailable, stop and report the blocker instead of creating a review-ready PR.
 - Move implemented work to `Review`; completed work to `Done`.
 
-When pushing changes, include:
+When pushing changes or creating a PR, include:
 
 - Summary of changed files.
 - Exact verification command(s) and real output, especially `make test`.

@@ -42,8 +42,8 @@ make test
 ## Canonical Dataset Artifact
 
 The app and CLI consume the reduced CSV artifact `movies_10.csv` in the project
-root by default. The reducer does not download IMDb data; place these IMDb TSV
-files in a local directory first:
+root by default. The reducer does not download IMDb data; bootstrap or place
+these IMDb TSV files in a local directory first:
 
 ```text
 title.basics.tsv
@@ -52,6 +52,64 @@ title.ratings.tsv
 name.basics.tsv
 title.principals.tsv
 ```
+
+## IMDb Source Data Bootstrap
+
+IMDb publishes the required source files at `https://datasets.imdbws.com/`.
+This project needs these compressed files:
+
+```text
+https://datasets.imdbws.com/title.basics.tsv.gz
+https://datasets.imdbws.com/title.crew.tsv.gz
+https://datasets.imdbws.com/title.ratings.tsv.gz
+https://datasets.imdbws.com/title.principals.tsv.gz
+https://datasets.imdbws.com/name.basics.tsv.gz
+```
+
+Use the bootstrap command to inspect or fetch the source files. It stores raw
+data under `data/imdb` by default, which is ignored by git.
+
+List required files and URLs without network access:
+
+```bash
+make imdb-bootstrap ARGS=--list
+```
+
+Preview the download plan without downloading anything:
+
+```bash
+make imdb-bootstrap ARGS=--dry-run
+```
+
+Create a tiny offline fixture set for development and tests:
+
+```bash
+make imdb-bootstrap ARGS="--sample --output-dir data/imdb-sample"
+make canonical-dataset IMDB_DATA_DIR=data/imdb-sample DATASET_OUTPUT=movies_sample DATASET_PERCENTAGE=0 DATASET_MIN_VOTES=0
+```
+
+Fetch the full compressed IMDb source files only when you are ready to perform
+the runtime operation with resource monitoring:
+
+```bash
+make imdb-bootstrap ARGS=--download
+```
+
+The bootstrap command streams compressed downloads to disk in 1 MiB chunks and
+fails closed if any compressed file exceeds the configured limit, which defaults
+to 2048 MiB per file. It does not decompress TSVs, load them into pandas, build
+recommendations, or generate reduced datasets. To change the cap:
+
+```bash
+make imdb-bootstrap ARGS="--download --max-file-size-mib 3072"
+```
+
+Plan for several GiB of compressed source data and tens of GiB if you later
+decompress the TSVs. Keep raw compressed files, decompressed TSVs, reduced CSVs,
+and Parquet artifacts out of git. On a shared 8 GB RAM VPS, do not run the
+current full-data recommendation path against raw IMDb files; the current
+recommender is an in-memory learning-era implementation and should only consume
+bounded reduced CSV artifacts.
 
 Generate the canonical reduced dataset from the repository root:
 

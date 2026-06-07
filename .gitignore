@@ -15,6 +15,11 @@ webapp/db.sqlite3
 
 # Build artifacts
 movies_*.csv
+movies_*.parquet
+data/
+imdb-data/
+*.tsv
+*.tsv.gz
 
 # Local-only agent notes, plans, and design docs
 .local-notes/

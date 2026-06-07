@@ -32,8 +32,8 @@ Run the current Django app:
 make run-web
 ```
 
-The web app expects a reduced dataset at `movies_10.csv` in the project root
-unless `RECOMMENDER_DATASET_PATH` is changed in `webapp/webapp/settings.py`.
+The web app expects a reduced dataset at `webapp/movies_10.csv` unless
+`RECOMMENDER_DATASET_PATH` is changed in `webapp/webapp/settings.py`.
 
 ## AI-Agent Workflow
 
@@ -92,5 +92,4 @@ recommendations.
 
 The web app looks for the reduced dataset using the `RECOMMENDER_DATASET_PATH`
 setting in `webapp/webapp/settings.py`. By default it points to
-`movies_10.csv` in the project root. Update this path if your CSV is stored
-elsewhere.
+`webapp/movies_10.csv`. Update this path if your CSV is stored elsewhere.

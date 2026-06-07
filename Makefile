@@ -3,11 +3,12 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 UV_CACHE_DIR ?= .uv-cache
 IMDB_DATA_DIR ?= .
+IMDB_BOOTSTRAP_DIR ?= data/imdb
 DATASET_OUTPUT ?= movies_10
 DATASET_PERCENTAGE ?= 0.90
 DATASET_MIN_VOTES ?= 1000
 
-.PHONY: setup test run-web smoke canonical-dataset clean
+.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset clean
 
 setup:
 	@if [ ! -x "$(VENV)/bin/python" ]; then \
@@ -37,6 +38,9 @@ run-web:
 
 smoke:
 	$(PYTHON) webapp/manage.py check
+
+imdb-bootstrap:
+	$(PYTHON) imdb_bootstrap.py --output-dir "$(IMDB_BOOTSTRAP_DIR)" $(ARGS)
 
 canonical-dataset:
 	$(PYTHON) movies.py --input-dir "$(IMDB_DATA_DIR)" --percentage "$(DATASET_PERCENTAGE)" --min-votes "$(DATASET_MIN_VOTES)" --output "$(DATASET_OUTPUT)"

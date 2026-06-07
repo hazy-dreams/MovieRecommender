@@ -39,8 +39,18 @@ The older `venv/` directory name and the common `.venv/` directory are both igno
 Reduce IMDb data into a smaller CSV:
 
 ```bash
-python movies.py -p 0.90 -o movies_10
+make canonical-dataset IMDB_DATA_DIR=/path/to/imdb-tsvs
 ```
+
+The input directory must already contain `title.basics.tsv`, `title.crew.tsv`,
+`title.ratings.tsv`, `name.basics.tsv`, and `title.principals.tsv`; the project
+must not download real IMDb data automatically. By default the generated CSV is
+`movies_10.csv` in the repo root, matching the web app's default
+`RECOMMENDER_DATASET_PATH`. The reducer also tries to write `movies_10.parquet`
+as a typed artifact when optional pandas Parquet dependencies are installed. If
+Parquet support is missing, CSV generation still succeeds and typed output is
+logged as skipped. Use `python movies.py --input-dir /path/to/imdb-tsvs --output movies_10 --no-typed`
+to skip typed output explicitly.
 
 Run CLI recommendations:
 

@@ -20,17 +20,33 @@ def main():
         "-o", "--output", default="movies_10", help="Output filename without extension"
     )
     parser.add_argument(
+        "--input-dir",
+        default=".",
+        help="Directory containing IMDb TSV files",
+    )
+    parser.add_argument(
         "--min-votes",
         type=int,
         default=1000,
         help="Minimum votes to keep; use 0 to rely only on --percentage",
+    )
+    parser.add_argument(
+        "--no-typed",
+        action="store_true",
+        help="Skip optional typed Parquet artifact generation",
     )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     reducer = MovieDatasetReducer()
-    reducer.reduce_dataset(args.percentage, args.output, min_votes=args.min_votes)
+    reducer.reduce_dataset(
+        args.percentage,
+        args.output,
+        min_votes=args.min_votes,
+        write_typed=not args.no_typed,
+        input_dir=args.input_dir,
+    )
 
 
 if __name__ == "__main__":

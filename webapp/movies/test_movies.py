@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -191,6 +192,111 @@ class MovieUtilsTest(unittest.TestCase):
         )
 
         self.assertEqual(dataset["tconst"].tolist(), ["tt002"])
+
+    def test_reduce_dataset_writes_canonical_csv_artifact(self) -> None:
+        """The reducer command path should emit the canonical app-compatible CSV."""
+        reducer = MovieDatasetReducer()
+        expected_columns = [
+            "tconst",
+            "title",
+            "primary_title",
+            "director",
+            "director_ids",
+            "director_names",
+            "genres",
+            "score",
+            "cast_ids",
+            "actors",
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            input_dir = Path(tmp) / "imdb"
+            input_dir.mkdir()
+            pd.DataFrame(
+                {
+                    "tconst": ["tt001", "tt002"],
+                    "titleType": ["movie", "movie"],
+                    "primaryTitle": ["Same Title", "Same Title"],
+                    "genres": ["Drama", "Comedy"],
+                }
+            ).to_csv(input_dir / "title.basics.tsv", sep="\t", index=False)
+            pd.DataFrame(
+                {
+                    "tconst": ["tt001", "tt002"],
+                    "directors": ["nm001", "nm002"],
+                }
+            ).to_csv(input_dir / "title.crew.tsv", sep="\t", index=False)
+            pd.DataFrame(
+                {
+                    "tconst": ["tt001", "tt002"],
+                    "averageRating": [7.0, 8.0],
+                    "numVotes": [10, 20],
+                }
+            ).to_csv(input_dir / "title.ratings.tsv", sep="\t", index=False)
+            pd.DataFrame(
+                {
+                    "nconst": ["nm001", "nm002", "nm101", "nm102"],
+                    "primaryName": [
+                        "Director One",
+                        "Director Two",
+                        "Actor One",
+                        "Actor Two",
+                    ],
+                }
+            ).to_csv(input_dir / "name.basics.tsv", sep="\t", index=False)
+            pd.DataFrame(
+                {
+                    "tconst": ["tt001", "tt002"],
+                    "ordering": [1, 1],
+                    "nconst": ["nm101", "nm102"],
+                    "category": ["actor", "actor"],
+                }
+            ).to_csv(input_dir / "title.principals.tsv", sep="\t", index=False)
+
+            output_prefix = Path(tmp) / "movies_10"
+            dataset = reducer.reduce_dataset(
+                percentage=None,
+                output_name=output_prefix,
+                min_votes=0,
+                write_typed=False,
+                input_dir=input_dir,
+            )
+            csv_dataset = pd.read_csv(f"{output_prefix}.csv")
+            rec = MovieRecommender()
+            loaded = rec.load_dataset(f"{output_prefix}.csv")
+
+        self.assertEqual(dataset.columns.tolist(), expected_columns)
+        self.assertEqual(csv_dataset.columns.tolist(), expected_columns)
+        self.assertNotIn("Unnamed: 0", csv_dataset.columns)
+        self.assertEqual(set(csv_dataset["tconst"]), {"tt001", "tt002"})
+        self.assertEqual(set(csv_dataset["primary_title"]), {"Same Title"})
+        self.assertEqual(
+            set(csv_dataset["title"]), {"Same Title (tt001)", "Same Title (tt002)"}
+        )
+        self.assertIsInstance(dataset.loc[0, "director_ids"], list)
+        self.assertIsInstance(dataset.loc[0, "director_names"], list)
+        self.assertIsInstance(dataset.loc[0, "cast_ids"], list)
+        self.assertIsInstance(dataset.loc[0, "actors"], list)
+        self.assertIsInstance(dataset.loc[0, "genres"], list)
+        self.assertEqual(
+            set(loaded["title"]), {"Same Title (tt001)", "Same Title (tt002)"}
+        )
+
+    def test_typed_output_is_optional_when_parquet_engine_is_missing(self) -> None:
+        """Typed output should fall back clearly when optional support is absent."""
+        reducer = MovieDatasetReducer()
+        metadata = pd.DataFrame({"title": ["Movie A"]})
+
+        with tempfile.TemporaryDirectory() as tmp:
+            output_prefix = Path(tmp) / "movies_10"
+            with patch.object(
+                pd.DataFrame, "to_parquet", side_effect=ImportError("missing parquet")
+            ):
+                with self.assertLogs("src.dataset_reducer", level="INFO") as logs:
+                    typed_path = reducer._write_typed_output(metadata, output_prefix)
+
+        self.assertIsNone(typed_path)
+        self.assertIn("Skipped typed Parquet output: missing parquet", logs.output[0])
 
     def test_clean_data_and_create_soup(self) -> None:
         """Verify cleaning helpers and soup creation."""

@@ -42,7 +42,7 @@ class MovieDatasetReducer:
 
     @staticmethod
     def _read_tsv(
-        path: str,
+        path: str | Path,
         usecols: list[str],
         chunksize: int | None = 1000000,
     ) -> pd.DataFrame:
@@ -184,15 +184,16 @@ class MovieDatasetReducer:
 
     def _write_typed_output(
         self, metadata: pd.DataFrame, output_name: str | Path
-    ) -> None:
+    ) -> Path | None:
         """Write a typed artifact when pandas has Parquet engine support."""
         output_path = Path(f"{output_name}.parquet")
         try:
             metadata.to_parquet(output_path, index=False)
         except (ImportError, ValueError) as exc:
             logger.info("Skipped typed Parquet output: %s", exc)
-            return
+            return None
         logger.info("Saved typed dataset to %s", output_path)
+        return output_path
 
     def reduce_dataset(
         self,
@@ -200,6 +201,7 @@ class MovieDatasetReducer:
         output_name: str | Path,
         min_votes: int | None = DEFAULT_MIN_VOTES,
         write_typed: bool = True,
+        input_dir: str | Path = ".",
     ) -> pd.DataFrame:
         """Reduce the raw IMDb dump.
 
@@ -217,14 +219,19 @@ class MovieDatasetReducer:
         write_typed:
             Write a Parquet artifact next to the CSV when optional pandas
             dependencies support it.
+        input_dir:
+            Directory containing the required IMDb TSV input files.
         """
+        input_dir = Path(input_dir)
         logger.info("Getting movie dataset...")
         title = self._read_tsv(
-            "title.basics.tsv",
+            input_dir / "title.basics.tsv",
             ["tconst", "titleType", "primaryTitle", "genres"],
         )
-        director = self._read_tsv("title.crew.tsv", ["tconst", "directors"])
-        ratings = pd.read_csv("title.ratings.tsv", sep="\t", encoding="utf-8")
+        director = self._read_tsv(input_dir / "title.crew.tsv", ["tconst", "directors"])
+        ratings = pd.read_csv(
+            input_dir / "title.ratings.tsv", sep="\t", encoding="utf-8"
+        )
 
         logger.info(
             "Reducing data to %s%% of most popular movies with at least %s votes.",
@@ -233,11 +240,11 @@ class MovieDatasetReducer:
         )
 
         logger.info("Getting movie directors...")
-        names = self._read_tsv("name.basics.tsv", ["nconst", "primaryName"])
+        names = self._read_tsv(input_dir / "name.basics.tsv", ["nconst", "primaryName"])
 
         logger.info("Getting movie cast members...")
         cast = self._read_tsv(
-            "title.principals.tsv",
+            input_dir / "title.principals.tsv",
             ["tconst", "ordering", "nconst", "category"],
         )
 
@@ -252,7 +259,7 @@ class MovieDatasetReducer:
         )
 
         output_path = Path(f"{output_name}.csv")
-        metadata.to_csv(output_path)
+        metadata.to_csv(output_path, index=False)
         logger.info("Saved dataset to %s", output_path)
         if write_typed:
             self._write_typed_output(metadata, output_name)

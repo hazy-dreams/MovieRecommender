@@ -2,8 +2,12 @@ BASE_PYTHON ?= python
 VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 UV_CACHE_DIR ?= .uv-cache
+IMDB_DATA_DIR ?= .
+DATASET_OUTPUT ?= movies_10
+DATASET_PERCENTAGE ?= 0.90
+DATASET_MIN_VOTES ?= 1000
 
-.PHONY: setup test run-web smoke clean
+.PHONY: setup test run-web smoke canonical-dataset clean
 
 setup:
 	@if [ ! -x "$(VENV)/bin/python" ]; then \
@@ -33,6 +37,9 @@ run-web:
 
 smoke:
 	$(PYTHON) webapp/manage.py check
+
+canonical-dataset:
+	$(PYTHON) movies.py --input-dir "$(IMDB_DATA_DIR)" --percentage "$(DATASET_PERCENTAGE)" --min-votes "$(DATASET_MIN_VOTES)" --output "$(DATASET_OUTPUT)"
 
 clean:
 	find . -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +

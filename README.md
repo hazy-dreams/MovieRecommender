@@ -39,6 +39,47 @@ Run the existing pytest suite from the repository root:
 make test
 ```
 
+## Canonical Dataset Artifact
+
+The app and CLI consume the reduced CSV artifact `movies_10.csv` in the project
+root by default. The reducer does not download IMDb data; place these IMDb TSV
+files in a local directory first:
+
+```text
+title.basics.tsv
+title.crew.tsv
+title.ratings.tsv
+name.basics.tsv
+title.principals.tsv
+```
+
+Generate the canonical reduced dataset from the repository root:
+
+```bash
+make canonical-dataset IMDB_DATA_DIR=/path/to/imdb-tsvs
+```
+
+This writes `movies_10.csv`, which is compatible with `recommender.py` and the
+Django app's default `RECOMMENDER_DATASET_PATH`. The CSV includes `tconst`,
+`primary_title`, director/cast IMDb ID lists, director/cast name lists, genres,
+score, and app-compatible title/director/actor columns. Duplicate primary titles
+are disambiguated with their `tconst`.
+
+The same command also attempts to write `movies_10.parquet` as a typed artifact.
+Parquet support is optional: if the installed pandas environment lacks a
+Parquet engine such as `pyarrow` or `fastparquet`, the reducer logs that typed
+output was skipped and still writes the CSV. To skip typed output explicitly:
+
+```bash
+python movies.py --input-dir /path/to/imdb-tsvs --output movies_10 --no-typed
+```
+
+You can override the artifact prefix and filter settings:
+
+```bash
+make canonical-dataset IMDB_DATA_DIR=/path/to/imdb-tsvs DATASET_OUTPUT=movies_10 DATASET_PERCENTAGE=0.90 DATASET_MIN_VOTES=1000
+```
+
 ### Future Work:
 - Make into a webapp using Django
 - Use database to provide backend data for webapp

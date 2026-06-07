@@ -11,6 +11,7 @@ webapp/db.sqlite3
 
 # Test cache
 .pytest_cache/
+.uv-cache/
 
 # Build artifacts
 movies_*.csv

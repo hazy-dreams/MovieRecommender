@@ -14,6 +14,7 @@ from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BASE_DIR.parent
 
 
 # Quick-start development settings - unsuitable for production
@@ -123,4 +124,4 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Location of the reduced movie dataset used by the recommender
-RECOMMENDER_DATASET_PATH = BASE_DIR / "movies_10.csv"
+RECOMMENDER_DATASET_PATH = REPO_ROOT / "movies_10.csv"

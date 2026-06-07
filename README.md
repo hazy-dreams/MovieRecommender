@@ -22,6 +22,23 @@ Both scripts now rely on the `MovieDatasetReducer` and `MovieRecommender` classe
 
 This program processes a lot of data and requires a 64-bit version of Python.
 
+## Setup
+
+Use Python 3.11+ from the repository root. This creates a local `.venv` if
+needed and installs dependencies from `requirements.txt`:
+
+```bash
+make setup
+```
+
+## Test
+
+Run the existing pytest suite from the repository root:
+
+```bash
+make test
+```
+
 ### Future Work:
 - Make into a webapp using Django
 - Use database to provide backend data for webapp
@@ -37,11 +54,10 @@ Data location: https://datasets.imdbws.com/
 ### Web App
 
 After generating a reduced dataset (`movies_10.csv` by default), you can start
-the Django development server from the `webapp` directory:
+the Django development server from the repository root:
 
 ```bash
-cd webapp
-python manage.py runserver
+make run-web
 ```
 
 Navigate to `http://localhost:8000/` to search for a movie and view
@@ -51,3 +67,15 @@ The web app looks for the reduced dataset using the `RECOMMENDER_DATASET_PATH`
 setting in `webapp/webapp/settings.py`. By default it points to
 `movies_10.csv` in the project root. Update this path if your CSV is stored
 elsewhere.
+
+For a quick Django configuration check, run:
+
+```bash
+make smoke
+```
+
+## Implementation reports
+
+When reporting completed implementation work, include the changed files, exact
+verification command(s), real command output, and any blockers such as missing
+dependencies or unavailable data.

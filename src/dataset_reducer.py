@@ -120,6 +120,18 @@ class MovieDatasetReducer:
             .reset_index()
         )
 
+    @staticmethod
+    def disambiguate_duplicate_titles(metadata: pd.DataFrame) -> pd.DataFrame:
+        """Append IMDb IDs to duplicate titles while preserving primary titles."""
+        metadata = metadata.copy()
+        metadata["primary_title"] = metadata["primaryTitle"]
+        metadata["title"] = metadata["primaryTitle"]
+        duplicate_titles = metadata["title"].duplicated(keep=False)
+        metadata.loc[duplicate_titles, "title"] = metadata.loc[
+            duplicate_titles
+        ].apply(lambda row: f"{row['primary_title']} ({row['tconst']})", axis=1)
+        return metadata
+
     def build_reduced_dataset(
         self,
         titles: pd.DataFrame,
@@ -150,11 +162,12 @@ class MovieDatasetReducer:
         metadata["director"] = metadata["director_names"].apply(
             lambda values: values[0] if values else ""
         )
-        metadata.rename(columns={"primaryTitle": "title"}, inplace=True)
+        metadata = self.disambiguate_duplicate_titles(metadata)
 
         columns = [
             "tconst",
             "title",
+            "primary_title",
             "director",
             "director_ids",
             "director_names",

@@ -70,7 +70,10 @@ class MovieUtilsTest(unittest.TestCase):
         )
 
         self.assertEqual(set(dataset["tconst"]), {"tt001", "tt002"})
-        self.assertEqual(dataset["title"].tolist().count("Same Title"), 2)
+        self.assertEqual(set(dataset["primary_title"]), {"Same Title"})
+        self.assertEqual(
+            set(dataset["title"]), {"Same Title (tt001)", "Same Title (tt002)"}
+        )
 
     def test_build_reduced_dataset_extracts_directors_and_cast(self) -> None:
         """Directors should split on commas and cast should include actresses."""
@@ -203,6 +206,33 @@ class MovieUtilsTest(unittest.TestCase):
         }
         soup = rec.create_soup(row)
         self.assertEqual(soup, "actorxactory directoradirectora actionthriller")
+
+    def test_load_dataset_disambiguates_duplicate_titles_with_tconst(self) -> None:
+        """Legacy tconst-bearing CSVs should not build ambiguous title indices."""
+        rec = MovieRecommender()
+        df = pd.DataFrame(
+            {
+                "tconst": ["tt001", "tt002", "tt003"],
+                "title": ["Same Title", "Same Title", "Other Title"],
+                "director": ["Director A", "Director B", "Director C"],
+                "genres": ["Action", "Comedy", "Drama"],
+                "score": [9.0, 8.0, 7.5],
+                "actors": ["Actor A", "Actor B", "Actor C"],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        try:
+            loaded = rec.load_dataset(Path(tmp.name))
+            result = rec.recommend("Same Title (tt001)", top_n=2).tolist()
+        finally:
+            os.unlink(tmp.name)
+
+        self.assertEqual(
+            loaded["title"].tolist(),
+            ["Same Title (tt001)", "Same Title (tt002)", "Other Title"],
+        )
+        self.assertEqual(result, ["Same Title (tt002)", "Other Title"])
 
     def test_load_and_recommend(self) -> None:
         """Loading a small dataset should enable recommendations."""

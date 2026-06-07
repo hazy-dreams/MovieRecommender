@@ -11,6 +11,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 class MovieRecommender:
     """Load movie data and generate recommendations."""
 
+    REQUIRED_COLUMNS = {"title", "director", "genres", "score", "actors"}
+
     def __init__(self):
         self.df = None
         self.indices = None
@@ -32,14 +34,36 @@ class MovieRecommender:
             ["".join(row["actors"]), "".join(row["director"]), "".join(row["genres"])]
         )
 
+    @staticmethod
+    def _disambiguate_duplicate_titles(df: pd.DataFrame) -> pd.DataFrame:
+        """Use tconst suffixes when duplicate title rows would break lookup."""
+        if "tconst" not in df.columns or not df["title"].duplicated(keep=False).any():
+            return df
+
+        df = df.copy()
+        duplicate_titles = df["title"].duplicated(keep=False)
+        df.loc[duplicate_titles, "title"] = df.loc[duplicate_titles].apply(
+            lambda row: f"{row['title']} ({row['tconst']})", axis=1
+        )
+        return df
+
     def load_dataset(self, dataset: str | Path) -> pd.DataFrame:
         """Read the reduced CSV dataset and prepare similarity matrix."""
-        df = pd.read_csv(
-            dataset,
-            sep=",",
-            encoding="utf-8",
-            usecols=["title", "director", "genres", "score", "actors"],
-        )
+        df = pd.read_csv(dataset, sep=",", encoding="utf-8")
+        missing_columns = sorted(self.REQUIRED_COLUMNS - set(df.columns))
+        if missing_columns:
+            raise ValueError(
+                "Dataset is missing required column(s): " + ", ".join(missing_columns)
+            )
+
+        df = self._disambiguate_duplicate_titles(df)
+        if df["title"].duplicated().any():
+            raise ValueError(
+                "Dataset contains duplicate title values and no tconst values to "
+                "disambiguate them."
+            )
+
+        df = df[["title", "director", "genres", "score", "actors"]].copy()
         df["director"] = df["director"].apply(lambda x: [x, x])
         for column in ["actors", "genres", "director"]:
             df[column] = df[column].astype("str").apply(self.clean_data)

@@ -1,88 +1,131 @@
-# MovieRecommender Development Guide
+# MovieRecommender Agent Guide
 
-This document provides a quick overview of the repository structure, coding style and testing instructions so AI tools and human contributors can work consistently.
+Use this as the working contract for AI agents touching this repo. The project is small, but it has a few sharp edges; do not cargo-cult new architecture into it just because the README says "recommender" and your inner platform engineer woke up.
 
-## Repository Overview
+## Project shape
 
-```
+```text
 MovieRecommender/
-├── movies.py              # CLI for reducing the IMDb dataset
-├── recommender.py         # CLI for running recommendations
-├── requirements.txt       # Python package requirements
-├── src/                   # Library code used by the CLIs and web app
-│   ├── __init__.py
-│   ├── dataset_reducer.py # MovieDatasetReducer class
-│   └── movie_recommender.py # MovieRecommender class
-└── webapp/                # Django project providing a simple UI
-    ├── manage.py
-    ├── movies/            # Django app with search view
-    └── webapp/            # Django configuration
+├── movies.py                 # CLI: reduce raw IMDb TSV data into a smaller CSV
+├── recommender.py            # CLI: load a reduced CSV and print recommendations
+├── requirements.txt          # Python runtime/test dependencies
+├── conftest.py               # Adds repo root to sys.path for pytest
+├── src/
+│   ├── dataset_reducer.py    # IMDb TSV reduction and weighted-rating logic
+│   └── movie_recommender.py  # Current content-based recommender
+└── webapp/
+    ├── manage.py             # Django entrypoint
+    ├── movies/               # Django app, views, template, tests
+    └── webapp/               # Django settings and URL config
 ```
 
-* `movies.py` reads raw IMDb TSV files and writes a smaller CSV using `MovieDatasetReducer`.
-* `recommender.py` loads the reduced CSV and prints recommended titles using `MovieRecommender`.
-* The `webapp` directory contains a minimal Django project that exposes a form for searching movies.
+The current recommender is a learning-era content recommender: it builds a text "soup" from actors, director, and genres, vectorizes it, and ranks by cosine similarity. Treat it respectfully, but do not mistake it for the target architecture.
 
-## Coding Conventions
+## Local agent notes
 
-* Use **Python 3.11** or newer.
-* Follow **PEP 8** style guidelines and keep functions small and well named.
-* Provide docstrings for public classes and functions.
-* Keep command line interfaces thin; most logic should live in the `src` package.
+Local project-scoped notes, plans, tradeoff discussions, lessons learned, and handoff context may exist under `.local-notes/`.
 
-## Running the Tools
+Rules:
 
-Install dependencies in a virtual environment:
+- Read relevant notes in `.local-notes/` before planning non-trivial work.
+- Never commit `.local-notes/`; it is intentionally gitignored.
+- Keep durable project context there instead of bloating global assistant memory.
+- If a note conflicts with tracked code or the user's latest instruction, the latest instruction and actual code win.
+
+## Development setup
+
+Use Python 3.11+.
+
+Prefer a virtual environment. On this host, `uv` is available and is the least-annoying route:
 
 ```bash
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
-### Dataset Reduction
+The older `venv/` directory name and the common `.venv/` directory are both ignored. Do not commit virtualenvs, generated CSVs, caches, or local databases.
+
+## Running the app and CLIs
+
+Reduce IMDb data into a smaller CSV:
 
 ```bash
 python movies.py -p 0.90 -o movies_10
 ```
 
-### Command Line Recommendations
+Run CLI recommendations:
 
 ```bash
 python recommender.py movies_10.csv "Inception"
 ```
 
-### Django Web Application
+Run the Django app:
 
 ```bash
 cd webapp
 python manage.py runserver
 ```
 
-Visit `http://localhost:8000/` to search for a movie and view recommendations.
+The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; by default it expects `movies_10.csv` in the repo root.
 
-## Testing
+## Tests and verification
 
-Run the automated tests before submitting changes:
+There are tests. Not many, but enough to be offended if ignored:
+
+- `webapp/movies/test_movies.py` covers reducer/recommender utility behavior.
+- `webapp/movies/test_search_view.py` covers the Django search view.
+- `webapp/movies/test_views.py` covers recommender caching in the Django view layer.
+
+Run from the repo root after installing dependencies:
 
 ```bash
-# from the repository root
-python -m pytest
+python -m pytest -q
+```
 
-# or run Django tests directly
+You can also run Django tests directly:
+
+```bash
 cd webapp
 python manage.py test
 ```
 
-Tests currently cover only a small portion of the codebase but should remain passing.
+If `python -m pytest` fails with `ModuleNotFoundError: No module named 'django'`, that means the current environment does not have dependencies installed. Fix the environment; do not pretend the repo has no tests.
 
-## Pull Requests
+For docs-only or gitignore-only changes, it is acceptable to report that tests were not runnable because dependencies were missing, but still be explicit about the command and failure.
 
-When opening a PR, include a short summary of the changes and reference the main files modified. Show the output of the test command you ran. Keep commits focused and avoid unrelated formatting changes.
+## Coding guidance
 
+- Keep CLI files thin; reusable logic belongs in `src/` or the Django app as appropriate.
+- Avoid broad rewrites unless the task explicitly asks for them.
+- Prefer small, reviewable commits with a clear verification step.
+- Preserve public behavior unless the issue/plan says otherwise.
+- Add or update tests when changing recommender logic, data loading, or web behavior.
+- Do not commit generated datasets such as `movies_*.csv`.
+- Do not add secrets, API keys, or machine-specific absolute paths.
 
-## Local agent notes
+## Roadmap posture
 
-Local notes, plans, tradeoff discussions, lessons learned, and agent handoff context may exist under `.local-notes/`.
-These files are intentionally gitignored.
-Use them as project-scoped context when present, but never commit them.
+The repo is moving toward a more useful recommender and a runnable app/API, but broad roadmap ideas are not automatically Codex-ready implementation tasks.
+
+Before implementing larger changes, clarify:
+
+1. What behavior changes?
+2. What data format or schema changes?
+3. What command or UI path verifies it?
+4. What test should fail before the fix and pass after it?
+
+Good near-term improvements are usually boring and valuable: stable movie IDs, better data loading, clearer test fixtures, less brittle title lookup, and a runnable local/private test path. Save the grand architecture parade for after the basics work.
+
+## GitHub workflow
+
+- Use GitHub Issues/Projects as the source of truth for roadmap and implementation tasks.
+- `Roadmap` means discussion/scoping/tradeoffs.
+- `Codex Ready` plus the `codex-ready` label means scoped, accepted, and verifiable.
+- Move implemented work to `Review`; completed work to `Done`.
+
+When pushing changes, include:
+
+- Summary of changed files.
+- Exact verification command(s) and real output.
+- Any known blocker, especially missing dependencies or unavailable data.

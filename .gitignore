@@ -2,8 +2,9 @@
 __pycache__/
 *.py[cod]
 
-# Virtual environment
+# Virtual environments
 venv/
+.venv/
 
 # Django database
 webapp/db.sqlite3

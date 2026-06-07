@@ -75,7 +75,7 @@ Run the Django app:
 make run-web
 ```
 
-The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; by default it expects `movies_10.csv` in the repo root.
+The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; by default it expects `webapp/movies_10.csv`.
 
 Run a lightweight Django configuration check:
 

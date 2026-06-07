@@ -39,10 +39,19 @@ Use Python 3.11+.
 Prefer a virtual environment. On this host, `uv` is available and is the least-annoying route:
 
 ```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+make setup
 ```
+
+`make setup` creates `.venv` with `uv` when available, otherwise it installs
+`requirements.txt` into the active Python environment. If `make` is unavailable,
+run:
+
+```bash
+UV_CACHE_DIR=.uv-cache uv venv --allow-existing
+UV_CACHE_DIR=.uv-cache uv pip install --python .venv/bin/python -r requirements.txt
+```
+
+Without `uv`, run `python -m pip install -r requirements.txt`.
 
 The older `venv/` directory name and the common `.venv/` directory are both ignored. Do not commit virtualenvs, generated CSVs, caches, or local databases.
 
@@ -63,11 +72,16 @@ python recommender.py movies_10.csv "Inception"
 Run the Django app:
 
 ```bash
-cd webapp
-python manage.py runserver
+make run-web
 ```
 
 The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; by default it expects `movies_10.csv` in the repo root.
+
+Run a lightweight Django configuration check:
+
+```bash
+make smoke
+```
 
 ## Tests and verification
 
@@ -80,8 +94,11 @@ There are tests. Not many, but enough to be offended if ignored:
 Run from the repo root after installing dependencies:
 
 ```bash
-python -m pytest -q
+make test
 ```
+
+`make test` is the canonical test command for agent reports. It runs
+`python -m pytest -q`.
 
 You can also run Django tests directly:
 
@@ -122,10 +139,12 @@ Good near-term improvements are usually boring and valuable: stable movie IDs, b
 - Use GitHub Issues/Projects as the source of truth for roadmap and implementation tasks.
 - `Roadmap` means discussion/scoping/tradeoffs.
 - `Codex Ready` plus the `codex-ready` label means scoped, accepted, and verifiable.
+- Expected loop: GitHub issue to Codex implementation to `make test` output to Juno review to PR/project state update.
 - Move implemented work to `Review`; completed work to `Done`.
 
 When pushing changes, include:
 
 - Summary of changed files.
-- Exact verification command(s) and real output.
+- Exact verification command(s) and real output, especially `make test`.
 - Any known blocker, especially missing dependencies or unavailable data.
+- Next suggested issue or review step when it is clear from the current work.

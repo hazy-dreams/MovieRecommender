@@ -5,6 +5,48 @@ Since the dataset is so big, `movies.py` is first used to reduce the data using 
 
 Both scripts now rely on the `MovieDatasetReducer` and `MovieRecommender` classes located in the `src` package.
 
+## Quickstart
+
+Use Python 3.11+ from the repository root. `make setup` creates `.venv` with
+`uv` when available, otherwise it installs into the active Python environment:
+
+```bash
+make setup
+```
+
+Run the canonical test suite:
+
+```bash
+make test
+```
+
+Run a lightweight Django configuration check:
+
+```bash
+make smoke
+```
+
+Run the current Django app:
+
+```bash
+make run-web
+```
+
+The web app expects a reduced dataset at `movies_10.csv` in the project root
+unless `RECOMMENDER_DATASET_PATH` is changed in `webapp/webapp/settings.py`.
+
+## AI-Agent Workflow
+
+Use GitHub issues as the source of truth for scoped changes. The expected loop
+is:
+
+1. Read `AGENTS.md`, the issue body, and relevant local code before editing.
+2. Implement only the accepted issue scope.
+3. Run `make test` from the repository root and capture the real output.
+4. Report changed files, verification command output, known blockers, and the
+   next suggested issue or review step.
+5. Hand off for Juno review, then GitHub PR/project state updates.
+
 `Examples:`
 
 | The Dark Knight  | Se7en | The Departed |
@@ -37,11 +79,10 @@ Data location: https://datasets.imdbws.com/
 ### Web App
 
 After generating a reduced dataset (`movies_10.csv` by default), you can start
-the Django development server from the `webapp` directory:
+the Django development server from the repository root:
 
 ```bash
-cd webapp
-python manage.py runserver
+make run-web
 ```
 
 Navigate to `http://localhost:8000/` to search for a movie and view

@@ -5,6 +5,7 @@ __pycache__/
 # Virtual environments
 venv/
 .venv/
+.uv-cache/
 
 # Django database
 webapp/db.sqlite3

@@ -649,6 +649,45 @@ class MovieUtilsTest(unittest.TestCase):
 
         self.assertEqual(candidates, ["row:2", "row:3"])
 
+    def test_sqlite_recommender_selects_candidates_by_overlap_before_limit(
+        self,
+    ) -> None:
+        """A higher-overlap candidate should win before candidate_limit is applied."""
+        df = pd.DataFrame(
+            {
+                "title": ["Movie A", "Movie B", "Movie C", "Movie D"],
+                "director": ["Aab", "Aab", "Aab", "Aab"],
+                "genres": ["Aaa", "Other", "Other", "Aaa"],
+                "score": [9.0, 8.0, 7.0, 1.0],
+                "actors": ["Actor A", "Actor B", "Actor C", "Actor D"],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
+        try:
+            rec = SQLiteMovieRecommender.from_csv(
+                Path(tmp.name),
+                store_path,
+                candidate_limit=1,
+            )
+            result = rec.recommend("Movie A", top_n=1)
+            with sqlite3.connect(store_path) as conn:
+                candidates = SQLiteMovieRecommender._candidate_tconsts(
+                    conn,
+                    "row:1",
+                    ["aaa", "aab"],
+                    1,
+                )
+        finally:
+            os.unlink(tmp.name)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
+
+        self.assertEqual(candidates, ["row:4"])
+        self.assertEqual(result, ["Movie D"])
+
     def test_sqlite_recommender_ranks_candidate_limit_before_top_n(self) -> None:
         """Candidates beyond top_n but within candidate_limit should be ranked."""
         df = pd.DataFrame(

@@ -397,12 +397,13 @@ class SQLiteMovieRecommender:
             f"""
             SELECT tconst
             FROM (
-                SELECT tconst, MIN(term) AS first_term
-                FROM movie_terms
-                WHERE term IN ({placeholders})
-                  AND tconst != ?
-                GROUP BY tconst
-                ORDER BY first_term ASC, tconst ASC
+                SELECT mt.tconst
+                FROM movie_terms mt
+                JOIN movies m ON m.tconst = mt.tconst
+                WHERE mt.term IN ({placeholders})
+                  AND mt.tconst != ?
+                GROUP BY mt.tconst
+                ORDER BY COUNT(*) DESC, m.score DESC, m.title ASC, mt.tconst ASC
                 LIMIT ?
             )
             """,

@@ -132,3 +132,12 @@ When pushing changes, include:
 - Summary of changed files.
 - Exact verification command(s) and real output.
 - Any known blocker, especially missing dependencies or unavailable data.
+
+### Codex review follow-ups
+
+When invoked from a GitHub pull request review thread to fix feedback:
+
+- Update the existing pull request head branch directly when the GitHub integration permits it.
+- Do not create a separate follow-up PR unless the user explicitly asks for one.
+- Do not report a PR, branch, or commit as visible on GitHub unless it was actually pushed to GitHub.
+- If pushing is unavailable, report the exact blocker, such as missing remote, missing GitHub write permission, branch protection, ruleset restriction, or blocked network access.

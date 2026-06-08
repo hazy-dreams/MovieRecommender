@@ -125,3 +125,5 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Location of the reduced movie dataset used by the recommender
 RECOMMENDER_DATASET_PATH = REPO_ROOT / "movies_10.csv"
+RECOMMENDER_STORE_PATH = REPO_ROOT / "movies_10.sqlite"
+RECOMMENDER_CANDIDATE_LIMIT = 500

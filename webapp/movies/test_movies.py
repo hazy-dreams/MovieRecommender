@@ -10,6 +10,7 @@ import pandas as pd
 
 from src.dataset_reducer import MovieDatasetReducer
 from src.movie_recommender import MovieRecommender
+from src.sqlite_recommender import SQLiteMovieRecommender
 
 
 class MovieUtilsTest(unittest.TestCase):
@@ -364,6 +365,88 @@ class MovieUtilsTest(unittest.TestCase):
         finally:
             os.unlink(tmp.name)
         self.assertEqual(result, ["Movie B", "Movie C"])
+
+    def test_sqlite_recommender_builds_store_and_recommends(self) -> None:
+        """SQLite path should recommend from an indexed store, not a full matrix."""
+        df = pd.DataFrame(
+            {
+                "tconst": ["tt001", "tt002", "tt003"],
+                "title": ["Movie A", "Movie B", "Movie C"],
+                "primary_title": ["Movie A", "Movie B", "Movie C"],
+                "director": ["Director A", "Director B", "Director C"],
+                "genres": [["Action"], ["Action"], ["Drama"]],
+                "score": [9.0, 8.0, 8.5],
+                "actors": [["Actor X", "Actor Y"], ["Actor Y"], ["Actor X"]],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
+        try:
+            rec = SQLiteMovieRecommender.from_csv(Path(tmp.name), store_path)
+            result = rec.recommend("Movie A", top_n=2)
+        finally:
+            os.unlink(tmp.name)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
+
+        self.assertEqual(result, ["Movie B", "Movie C"])
+
+    def test_sqlite_recommender_disambiguates_duplicate_titles(self) -> None:
+        """The SQLite path should preserve duplicate primary titles by tconst."""
+        df = pd.DataFrame(
+            {
+                "tconst": ["tt001", "tt002", "tt003"],
+                "title": ["Same Title", "Same Title", "Other Title"],
+                "director": ["Director A", "Director B", "Director C"],
+                "genres": ["Action", "Comedy", "Drama"],
+                "score": [9.0, 8.0, 7.5],
+                "actors": ["Actor A", "Actor B", "Actor C"],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
+        try:
+            rec = SQLiteMovieRecommender.from_csv(Path(tmp.name), store_path)
+            result = rec.recommend("Same Title (tt001)", top_n=2)
+        finally:
+            os.unlink(tmp.name)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
+
+        self.assertEqual(result, ["Same Title (tt002)", "Other Title"])
+
+    def test_sqlite_recommender_limits_term_candidates(self) -> None:
+        """Shared-term retrieval should be capped before fallback ranking."""
+        df = pd.DataFrame(
+            {
+                "title": ["Movie A", "Movie B", "Movie C", "Movie D"],
+                "director": ["Director A", "Director B", "Director C", "Director D"],
+                "genres": ["Action", "Action", "Action", "Drama"],
+                "score": [9.0, 8.0, 7.0, 10.0],
+                "actors": ["Actor A", "Actor B", "Actor C", "Actor D"],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
+        try:
+            rec = SQLiteMovieRecommender.from_csv(
+                Path(tmp.name),
+                store_path,
+                candidate_limit=1,
+            )
+            result = rec.recommend("Movie A", top_n=3)
+        finally:
+            os.unlink(tmp.name)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
+
+        self.assertEqual(result, ["Movie B", "Movie D", "Movie C"])
 
 
 if __name__ == "__main__":

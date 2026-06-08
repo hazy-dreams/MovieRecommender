@@ -16,7 +16,7 @@ setup_test_environment()
 import pandas as pd
 from django.test import Client, TestCase, override_settings
 
-from movies.views import _load_recommender
+from movies.views import _load_existing_store, _load_recommender
 
 
 @override_settings(ALLOWED_HOSTS=["testserver"])
@@ -25,6 +25,7 @@ class SearchViewTest(TestCase):
 
     def setUp(self) -> None:
         _load_recommender.cache_clear()
+        _load_existing_store.cache_clear()
         self.client = Client()
 
     def create_dataset(self) -> str:
@@ -49,8 +50,13 @@ class SearchViewTest(TestCase):
     def test_search_returns_recommendations(self) -> None:
         """Posting a valid title should return movie recommendations."""
         dataset_path = self.create_dataset()
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
         try:
-            with override_settings(RECOMMENDER_DATASET_PATH=dataset_path):
+            with override_settings(
+                RECOMMENDER_DATASET_PATH=dataset_path,
+                RECOMMENDER_STORE_PATH=store_path,
+            ):
                 response = self.client.post("/", {"title": "Movie A"})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(
@@ -60,13 +66,18 @@ class SearchViewTest(TestCase):
             self.assertIsNone(response.context["error"])
         finally:
             os.unlink(dataset_path)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
 
     def test_search_missing_dataset_shows_error(self) -> None:
         """An error message should be shown when the dataset is missing."""
         missing_path = "/tmp/does_not_exist.csv"
-        with override_settings(RECOMMENDER_DATASET_PATH=missing_path):
+        missing_store_path = "/tmp/does_not_exist.sqlite"
+        with override_settings(
+            RECOMMENDER_DATASET_PATH=missing_path,
+            RECOMMENDER_STORE_PATH=missing_store_path,
+        ):
             response = self.client.post("/", {"title": "Movie A"})
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context["recommendations"])
         self.assertIn("Dataset not found", response.context["error"])
-

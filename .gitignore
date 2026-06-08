@@ -16,6 +16,7 @@ webapp/db.sqlite3
 # Build artifacts
 movies_*.csv
 movies_*.parquet
+movies_*.sqlite
 data/
 imdb-data/
 *.tsv

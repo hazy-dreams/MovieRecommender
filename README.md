@@ -1,9 +1,11 @@
 # MovieRecommender
 Recommends movies based on cast, director, genres, and IMDB rating.
 
-Since the dataset is so big, `movies.py` is first used to reduce the data using an IMDb weighted rating formula and the desired quantile to a more manageable level. The recommendation system then runs with this data via `recommender.py`.
+Since the dataset is so big, `movies.py` is first used to reduce the data using an IMDb weighted rating formula and the desired quantile to a more manageable level. The recommendation system then imports that reduced CSV into an indexed SQLite preview store and serves recommendations from bounded candidate lookups.
 
-Both scripts now rely on the `MovieDatasetReducer` and `MovieRecommender` classes located in the `src` package.
+Dataset generation relies on `MovieDatasetReducer`. Runtime recommendations use
+`SQLiteMovieRecommender`, which avoids loading the full CSV into pandas or
+building an all-pairs similarity matrix at app/CLI runtime.
 
 `Examples:`
 
@@ -38,6 +40,61 @@ Run the existing pytest suite from the repository root:
 ```bash
 make test
 ```
+
+## Bounded Preview Recommendation Path
+
+The private-preview runtime path is intentionally conservative for an 8 GB VPS:
+
+- `movies.py` still produces a reduced CSV artifact from IMDb TSVs.
+- `recommender.py` and the Django app stream that reduced CSV into
+  `movies_10.sqlite` when the SQLite store is missing or older than the CSV.
+- SQLite stores one `movies` row per title plus indexed `movie_terms` rows for
+  actor, director, and genre terms.
+- Recommendation lookup starts from an exact indexed title match, retrieves at
+  most `RECOMMENDER_CANDIDATE_LIMIT` shared-term candidates, ranks those by term
+  overlap and score, then fills any remaining slots by score.
+
+This avoids the old runtime hazards:
+
+- no pandas dataframe load is required by the app or CLI recommendation path,
+- no scikit vectorizer is built at app runtime,
+- no full all-pairs cosine similarity matrix is allocated,
+- raw IMDb TSVs are never read by the app runtime.
+
+The legacy `MovieRecommender` class remains in `src/movie_recommender.py` for
+compatibility and small tests, but it should not be used for full or preview
+runtime serving.
+
+Build or refresh the SQLite store by running a recommendation once:
+
+```bash
+python recommender.py movies_10.csv "Inception"
+```
+
+The default store is `movies_10.sqlite` next to the CSV. Override it when needed:
+
+```bash
+python recommender.py movies_10.csv "Inception" --store /tmp/movies_preview.sqlite --candidate-limit 250
+```
+
+The Django app uses these settings from `webapp/webapp/settings.py`:
+
+```text
+RECOMMENDER_DATASET_PATH = movies_10.csv
+RECOMMENDER_STORE_PATH = movies_10.sqlite
+RECOMMENDER_CANDIDATE_LIMIT = 500
+```
+
+If the SQLite store exists, the app can serve recommendations without the CSV
+being present. If neither exists, the app reports that the dataset is missing.
+
+Remaining steps toward the target architecture:
+
+- move the SQLite schema into Postgres tables keyed by `tconst`,
+- replace term-overlap retrieval with pgvector ANN candidate retrieval,
+- keep the same two-stage shape: bounded retrieval first, richer rerank second,
+- expose the serving path through FastAPI after the bounded data path has been
+  validated in private preview.
 
 ## Canonical Dataset Artifact
 
@@ -106,10 +163,9 @@ make imdb-bootstrap ARGS="--download --max-file-size-mib 3072"
 
 Plan for several GiB of compressed source data and tens of GiB if you later
 decompress the TSVs. Keep raw compressed files, decompressed TSVs, reduced CSVs,
-and Parquet artifacts out of git. On a shared 8 GB RAM VPS, do not run the
-current full-data recommendation path against raw IMDb files; the current
-recommender is an in-memory learning-era implementation and should only consume
-bounded reduced CSV artifacts.
+SQLite stores, and Parquet artifacts out of git. On a shared 8 GB RAM VPS, do
+not run recommendation jobs against raw IMDb files; runtime recommendations
+should use the bounded SQLite preview store.
 
 Generate the canonical reduced dataset from the repository root:
 
@@ -138,6 +194,16 @@ You can override the artifact prefix and filter settings:
 make canonical-dataset IMDB_DATA_DIR=/path/to/imdb-tsvs DATASET_OUTPUT=movies_10 DATASET_PERCENTAGE=0.90 DATASET_MIN_VOTES=1000
 ```
 
+Run CLI recommendations:
+
+```bash
+python recommender.py movies_10.csv "Inception"
+```
+
+This command uses the bounded SQLite preview store by default. It does not load
+the full reduced CSV into pandas and does not build an all-pairs similarity
+matrix.
+
 ### Future Work:
 - Make into a webapp using Django
 - Use database to provide backend data for webapp
@@ -162,10 +228,10 @@ make run-web
 Navigate to `http://localhost:8000/` to search for a movie and view
 recommendations.
 
-The web app looks for the reduced dataset using the `RECOMMENDER_DATASET_PATH`
-setting in `webapp/webapp/settings.py`. By default it points to
-`movies_10.csv` in the project root. Update this path if your CSV is stored
-elsewhere.
+The web app looks for the SQLite recommendation store using
+`RECOMMENDER_STORE_PATH` and can build it from `RECOMMENDER_DATASET_PATH` when
+the reduced CSV is available. By default both point to `movies_10.*` artifacts
+in the project root. Update these paths if your artifacts are stored elsewhere.
 
 For a quick Django configuration check, run:
 

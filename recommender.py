@@ -5,7 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from src import SQLiteMovieRecommender
+from src.sqlite_recommender import SQLiteMovieRecommender
 
 
 def main():

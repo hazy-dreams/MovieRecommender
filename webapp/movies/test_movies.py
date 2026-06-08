@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import sqlite3
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -462,6 +463,32 @@ class MovieUtilsTest(unittest.TestCase):
             self.assertEqual(fixed_tmp_path.read_text(encoding="utf-8"), "sentinel")
             self.assertFalse(Path(f"{store_path}.lock").exists())
 
+    def test_sqlite_recommender_recovers_stale_build_lock(self) -> None:
+        """A dead lock owner should not block future store builds."""
+        df = pd.DataFrame(
+            {
+                "title": ["Movie A", "Movie B"],
+                "director": ["Director A", "Director B"],
+                "genres": ["Drama", "Drama"],
+                "score": [9.0, 8.0],
+                "actors": ["Actor X", "Actor Y"],
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            csv_path = Path(tmp) / "movies.csv"
+            store_path = Path(tmp) / "movies.sqlite"
+            lock_path = Path(f"{store_path}.lock")
+            df.to_csv(csv_path, index=False)
+            lock_path.write_text(
+                f"pid=999999999\ncreated_at={time.time()}\n",
+                encoding="ascii",
+            )
+
+            SQLiteMovieRecommender.build_store(csv_path, store_path)
+
+            self.assertTrue(store_path.exists())
+            self.assertFalse(lock_path.exists())
+
     def test_sqlite_recommender_disambiguates_duplicate_titles(self) -> None:
         """The SQLite path should preserve duplicate primary titles by tconst."""
         df = pd.DataFrame(
@@ -524,6 +551,53 @@ class MovieUtilsTest(unittest.TestCase):
 
         self.assertEqual(result, ["Movie B", "Movie D", "Movie C"])
         self.assertEqual(candidates, ["row:2"])
+
+    def test_sqlite_recommender_ranks_candidate_limit_before_top_n(self) -> None:
+        """Candidates beyond top_n but within candidate_limit should be ranked."""
+        df = pd.DataFrame(
+            {
+                "title": ["Movie A", "Movie B", "Movie C", "Movie D", "Movie E"],
+                "director": [
+                    "Director A",
+                    "Director B",
+                    "Director C",
+                    "Director D",
+                    "Director E",
+                ],
+                "genres": ["Action", "Action", "Action", "Action", "Action"],
+                "score": [9.0, 1.0, 2.0, 8.0, 10.0],
+                "actors": ["Actor A", "Actor B", "Actor C", "Actor D", "Actor E"],
+            }
+        )
+        with tempfile.NamedTemporaryFile(suffix=".csv", delete=False, mode="w+") as tmp:
+            df.to_csv(tmp.name, index=False)
+        store_path = tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False).name
+        os.unlink(store_path)
+        try:
+            rec = SQLiteMovieRecommender.from_csv(
+                Path(tmp.name),
+                store_path,
+                candidate_limit=4,
+            )
+            result = rec.recommend("Movie A", top_n=2)
+        finally:
+            os.unlink(tmp.name)
+            if os.path.exists(store_path):
+                os.unlink(store_path)
+
+        self.assertEqual(result, ["Movie E", "Movie D"])
+
+    def test_cli_imports_sqlite_recommender_directly(self) -> None:
+        """The CLI should not import src.__init__ and the old recommender stack."""
+        cli_source = (Path(__file__).resolve().parents[2] / "recommender.py").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn(
+            "from src.sqlite_recommender import SQLiteMovieRecommender",
+            cli_source,
+        )
+        self.assertNotIn("from src import SQLiteMovieRecommender", cli_source)
 
 
 if __name__ == "__main__":

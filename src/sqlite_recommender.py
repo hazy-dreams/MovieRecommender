@@ -21,6 +21,7 @@ class SQLiteMovieRecommender:
     REQUIRED_COLUMNS = {"title", "director", "genres", "score", "actors"}
     DEFAULT_CANDIDATE_LIMIT = 500
     METADATA_KEYS = {"source_path", "source_size", "source_mtime_ns", "source_sha256"}
+    LOCK_STALE_SECONDS = 600
 
     def __init__(
         self,
@@ -153,11 +154,20 @@ class SQLiteMovieRecommender:
             try:
                 fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             except FileExistsError:
+                if cls._lock_is_stale(lock_path):
+                    try:
+                        lock_path.unlink()
+                    except FileNotFoundError:
+                        pass
+                    continue
                 if time.monotonic() >= deadline:
                     raise TimeoutError(f"Timed out waiting for build lock: {lock_path}")
                 time.sleep(0.05)
         try:
-            os.write(fd, str(os.getpid()).encode("ascii"))
+            os.write(
+                fd,
+                f"pid={os.getpid()}\ncreated_at={time.time()}\n".encode("ascii"),
+            )
             yield
         finally:
             os.close(fd)
@@ -165,6 +175,43 @@ class SQLiteMovieRecommender:
                 lock_path.unlink()
             except FileNotFoundError:
                 pass
+
+    @classmethod
+    def _lock_is_stale(cls, lock_path: Path) -> bool:
+        try:
+            text = lock_path.read_text(encoding="ascii")
+        except FileNotFoundError:
+            return False
+
+        metadata = {}
+        for line in text.splitlines():
+            if "=" in line:
+                key, value = line.split("=", 1)
+                metadata[key] = value
+
+        try:
+            created_at = float(metadata["created_at"])
+            pid = int(metadata["pid"])
+        except (KeyError, ValueError):
+            try:
+                lock_mtime = lock_path.stat().st_mtime
+            except FileNotFoundError:
+                return False
+            return time.time() - lock_mtime > cls.LOCK_STALE_SECONDS
+
+        if time.time() - created_at > cls.LOCK_STALE_SECONDS:
+            return True
+        if pid <= 0:
+            return True
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        except OSError:
+            return False
+        return False
 
     @classmethod
     def _source_metadata(cls, dataset_path: Path) -> dict[str, str]:
@@ -311,11 +358,15 @@ class SQLiteMovieRecommender:
     ) -> list[str]:
         if not query_terms:
             return []
-        limit = min(top_n, self.candidate_limit)
-        if limit == 0:
+        if self.candidate_limit == 0:
             return []
         placeholders = ",".join("?" for _ in query_terms)
-        candidates = self._candidate_tconsts(conn, tconst, query_terms, limit)
+        candidates = self._candidate_tconsts(
+            conn,
+            tconst,
+            query_terms,
+            self.candidate_limit,
+        )
         if not candidates:
             return []
         candidate_placeholders = ",".join("?" for _ in candidates)
@@ -330,7 +381,7 @@ class SQLiteMovieRecommender:
             ORDER BY COUNT(*) DESC, m.score DESC, m.title ASC
             LIMIT ?
             """,
-            [*query_terms, *candidates, limit],
+            [*query_terms, *candidates, top_n],
         )
         return [row[0] for row in rows]
 

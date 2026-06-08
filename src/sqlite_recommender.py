@@ -107,6 +107,8 @@ class SQLiteMovieRecommender:
                         value TEXT NOT NULL
                     );
                     CREATE INDEX idx_movies_title ON movies(title);
+                    CREATE INDEX idx_movies_score_title
+                        ON movies(score DESC, title ASC);
                     CREATE INDEX idx_movie_terms_tconst ON movie_terms(tconst);
                     """
                 )
@@ -199,8 +201,6 @@ class SQLiteMovieRecommender:
                 return False
             return time.time() - lock_mtime > cls.LOCK_STALE_SECONDS
 
-        if time.time() - created_at > cls.LOCK_STALE_SECONDS:
-            return True
         if pid <= 0:
             return True
         try:
@@ -396,15 +396,19 @@ class SQLiteMovieRecommender:
         rows = conn.execute(
             f"""
             SELECT tconst
-            FROM movie_terms
-            WHERE term IN ({placeholders})
-              AND tconst != ?
-            ORDER BY term ASC, tconst ASC
-            LIMIT ?
+            FROM (
+                SELECT tconst, MIN(term) AS first_term
+                FROM movie_terms
+                WHERE term IN ({placeholders})
+                  AND tconst != ?
+                GROUP BY tconst
+                ORDER BY first_term ASC, tconst ASC
+                LIMIT ?
+            )
             """,
             [*query_terms, tconst, limit],
         )
-        return list(dict.fromkeys(row[0] for row in rows))
+        return [row[0] for row in rows]
 
     @staticmethod
     def _fallback_by_score(

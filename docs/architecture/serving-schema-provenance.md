@@ -325,7 +325,13 @@ CREATE TABLE movie_text_features (
     source_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
-    UNIQUE (text_feature_id, tconst, feature_name, feature_version),
+    UNIQUE (
+        text_feature_id,
+        tconst,
+        feature_name,
+        feature_version,
+        source_text_sha256
+    ),
     UNIQUE (tconst, feature_name, feature_version, source_text_sha256)
 );
 ```
@@ -377,25 +383,36 @@ CREATE TABLE movie_embeddings (
     embedding_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
-    FOREIGN KEY (text_feature_id, tconst, feature_name, feature_version)
+    FOREIGN KEY (
+        text_feature_id,
+        tconst,
+        feature_name,
+        feature_version,
+        source_text_sha256
+    )
         REFERENCES movie_text_features(
             text_feature_id,
             tconst,
             feature_name,
-            feature_version
+            feature_version,
+            source_text_sha256
         ),
     UNIQUE (text_feature_id, model_name, model_version, vector_dimension)
 );
 ```
 
-The actual `embedding` column dimension must be fixed in the migration for the
-selected model, for example `vector(1536) NOT NULL` instead of unbounded
-`vector NOT NULL`. Keep `vector_dimension` as explicit metadata even though
-Postgres enforces the column dimension.
+The logical schema keeps `embedding` and `vector_dimension` together so model
+changes can add a new dimension without overwriting old rows. The physical
+implementation must not be a single fixed-dimension table if multiple vector
+dimensions need to coexist. Use one table or partition per dimension, such as
+`movie_embeddings_1536` with `embedding vector(1536) NOT NULL` and a
+`vector_dimension = 1536` check, or use an unbounded `vector` column with
+per-dimension expression indexes that cast to the configured dimension.
 
-`feature_name` and `feature_version` are copied from the referenced text feature
-row so pgvector ANN indexes can be scoped to one embedding space before the
-approximate scan runs.
+`feature_name`, `feature_version`, and `source_text_sha256` are copied from the
+referenced text feature row so the foreign key proves which source text was
+embedded and pgvector ANN indexes can be scoped to one embedding space before
+the approximate scan runs.
 
 Vector versioning rules:
 
@@ -410,8 +427,10 @@ Vector versioning rules:
   successfully written and verified.
 
 Recommended pgvector indexes should be created per configured serving embedding
-set, or the table should use equivalent partitioning by serving set. Do not use
-a single active-only ANN index across multiple feature/model/version slices.
+set and vector dimension, or the table should use equivalent partitioning by
+serving set and dimension. Do not use a single active-only ANN index across
+multiple feature/model/version/dimension slices. Example for the
+1536-dimensional serving table or partition:
 
 ```sql
 CREATE INDEX idx_movie_embeddings_ann_recommendation_soup_v1
@@ -484,6 +503,7 @@ WITH query_embedding AS (
      AND tf.tconst = e.tconst
      AND tf.feature_name = e.feature_name
      AND tf.feature_version = e.feature_version
+     AND tf.source_text_sha256 = e.source_text_sha256
     WHERE e.tconst = :query_tconst
       AND e.active
       AND e.model_name = :model_name
@@ -512,6 +532,7 @@ JOIN movie_text_features tf
  AND tf.tconst = e.tconst
  AND tf.feature_name = e.feature_name
  AND tf.feature_version = e.feature_version
+ AND tf.source_text_sha256 = e.source_text_sha256
  AND tf.active
 JOIN movies m ON m.tconst = e.tconst
 WHERE e.tconst <> :query_tconst

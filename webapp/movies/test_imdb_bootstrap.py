@@ -4,16 +4,41 @@ from io import StringIO
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import pandas as pd
 
 from src.dataset_reducer import MovieDatasetReducer
 from src.imdb_bootstrap import (
     REQUIRED_SOURCE_FILES,
+    download_sources,
     dry_run,
     list_sources,
     write_sample_fixture,
 )
+
+
+class FakeDownloadResponse:
+    def __init__(self, chunks: list[bytes], fail_after_chunks: bool = False) -> None:
+        self.headers = {"Content-Length": str(sum(len(chunk) for chunk in chunks))}
+        self.chunks = chunks
+        self.fail_after_chunks = fail_after_chunks
+        self.index = 0
+
+    def __enter__(self) -> "FakeDownloadResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self, chunk_size: int) -> bytes:
+        if self.index < len(self.chunks):
+            chunk = self.chunks[self.index]
+            self.index += 1
+            return chunk
+        if self.fail_after_chunks:
+            raise RuntimeError("download failed")
+        return b""
 
 
 class ImdbBootstrapTest(unittest.TestCase):
@@ -39,6 +64,61 @@ class ImdbBootstrapTest(unittest.TestCase):
 
         self.assertIn("No files downloaded", output.getvalue())
         self.assertFalse(output_dir_exists)
+
+    def test_download_skips_existing_files_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "imdb"
+            output_dir.mkdir()
+            for source in REQUIRED_SOURCE_FILES:
+                (output_dir / source.filename).write_bytes(b"existing")
+
+            with patch("src.imdb_bootstrap.urlopen") as urlopen:
+                paths = download_sources(output_dir, output=StringIO())
+
+        urlopen.assert_not_called()
+        self.assertEqual(len(paths), len(REQUIRED_SOURCE_FILES))
+
+    def test_download_force_replaces_existing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "imdb"
+            output_dir.mkdir()
+            for source in REQUIRED_SOURCE_FILES:
+                (output_dir / source.filename).write_bytes(b"existing")
+            output = StringIO()
+
+            with patch(
+                "src.imdb_bootstrap.urlopen",
+                side_effect=lambda *args, **kwargs: FakeDownloadResponse([b"replacement"]),
+            ) as urlopen:
+                paths = download_sources(output_dir, force=True, output=output)
+
+            contents = [(output_dir / source.filename).read_bytes() for source in REQUIRED_SOURCE_FILES]
+
+        self.assertEqual(urlopen.call_count, len(REQUIRED_SOURCE_FILES))
+        self.assertEqual(contents, [b"replacement"] * len(REQUIRED_SOURCE_FILES))
+        self.assertEqual(len(paths), len(REQUIRED_SOURCE_FILES))
+        self.assertIn("Refreshing", output.getvalue())
+
+    def test_download_force_failure_preserves_existing_file_and_removes_temp_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp) / "imdb"
+            output_dir.mkdir()
+            first_source = REQUIRED_SOURCE_FILES[0]
+            for source in REQUIRED_SOURCE_FILES:
+                (output_dir / source.filename).write_bytes(b"existing")
+
+            with patch(
+                "src.imdb_bootstrap.urlopen",
+                return_value=FakeDownloadResponse([b"partial"], fail_after_chunks=True),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "download failed"):
+                    download_sources(output_dir, force=True, output=StringIO())
+
+            preserved_content = (output_dir / first_source.filename).read_bytes()
+            temp_files = [path for path in output_dir.iterdir() if path.name.startswith(".")]
+
+        self.assertEqual(preserved_content, b"existing")
+        self.assertEqual(temp_files, [])
 
     def test_sample_fixture_is_small_and_reducer_compatible(self) -> None:
         reducer = MovieDatasetReducer()

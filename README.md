@@ -161,6 +161,19 @@ recommendations, or generate reduced datasets. To change the cap:
 make imdb-bootstrap ARGS="--download --max-file-size-mib 3072"
 ```
 
+By default, existing compressed source files are skipped. Use `--force` only
+when you intentionally want to refresh local compressed sources that already
+exist:
+
+```bash
+make imdb-bootstrap ARGS="--download --force"
+```
+
+Forced refreshes still stream each compressed file to a temporary file in the
+output directory and atomically replace the existing file only after the
+download completes successfully. They still do not decompress TSVs or load full
+IMDb data into memory.
+
 Plan for several GiB of compressed source data and tens of GiB if you later
 decompress the TSVs. Keep raw compressed files, decompressed TSVs, reduced CSVs,
 SQLite stores, and Parquet artifacts out of git. On a shared 8 GB RAM VPS, do

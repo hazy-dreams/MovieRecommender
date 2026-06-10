@@ -383,6 +383,7 @@ CREATE TABLE movie_embeddings (
     embedding_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
+    CHECK (vector_dims(embedding) = vector_dimension),
     FOREIGN KEY (
         text_feature_id,
         tconst,
@@ -407,7 +408,9 @@ implementation must not be a single fixed-dimension table if multiple vector
 dimensions need to coexist. Use one table or partition per dimension, such as
 `movie_embeddings_1536` with `embedding vector(1536) NOT NULL` and a
 `vector_dimension = 1536` check, or use an unbounded `vector` column with
-per-dimension expression indexes that cast to the configured dimension.
+per-dimension expression indexes that cast to the configured dimension. In both
+cases, enforce `vector_dims(embedding) = vector_dimension` so serving filters
+cannot select mislabeled vectors.
 
 `feature_name`, `feature_version`, and `source_text_sha256` are copied from the
 referenced text feature row so the foreign key proves which source text was

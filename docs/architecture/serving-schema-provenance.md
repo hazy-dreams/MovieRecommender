@@ -355,8 +355,8 @@ If the text construction changes, increment `feature_version`. Do not overwrite
 old text feature rows that have embeddings; mark superseded rows inactive if
 needed. If the source movie data changes but the construction method and
 `feature_version` stay the same, insert a new inactive row with the new
-`source_text_sha256`, build replacement embeddings, then activate the new row
-and mark the older row inactive in the same transaction.
+`source_text_sha256`, build replacement embeddings, then swap active rows in one
+transaction by marking the older row inactive before activating the new row.
 
 ## Embeddings
 
@@ -498,7 +498,10 @@ Recommendation retrieval should be bounded:
 5. Rerank or decorate candidates using movie metadata, ratings, genres, and
    credits as needed.
 
-Expected query shape:
+Expected query shape for the configured 1536-dimensional serving slice. The
+feature/model/version/dimension predicates are literals matching the partial ANN
+index above, not bind parameters; otherwise PostgreSQL may be unable to prove
+the partial-index predicate for a prepared statement.
 
 ```sql
 WITH query_embedding AS (
@@ -512,11 +515,11 @@ WITH query_embedding AS (
      AND tf.source_text_sha256 = e.source_text_sha256
     WHERE e.tconst = :query_tconst
       AND e.active
-      AND e.model_name = :model_name
-      AND e.model_version = :model_version
-      AND e.vector_dimension = :vector_dimension
-      AND e.feature_name = :feature_name
-      AND e.feature_version = :feature_version
+      AND e.model_name = 'configured-model'
+      AND e.model_version = 'configured-model-version'
+      AND e.vector_dimension = 1536
+      AND e.feature_name = 'recommendation_soup'
+      AND e.feature_version = 'v1'
       AND tf.active
 )
 SELECT m.tconst,
@@ -528,11 +531,11 @@ SELECT m.tconst,
 FROM query_embedding q
 JOIN movie_embeddings e
   ON e.active
- AND e.model_name = :model_name
- AND e.model_version = :model_version
- AND e.vector_dimension = :vector_dimension
- AND e.feature_name = :feature_name
- AND e.feature_version = :feature_version
+ AND e.model_name = 'configured-model'
+ AND e.model_version = 'configured-model-version'
+ AND e.vector_dimension = 1536
+ AND e.feature_name = 'recommendation_soup'
+ AND e.feature_version = 'v1'
 JOIN movie_text_features tf
   ON tf.text_feature_id = e.text_feature_id
  AND tf.tconst = e.tconst

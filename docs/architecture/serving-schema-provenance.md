@@ -325,7 +325,7 @@ CREATE TABLE movie_text_features (
     source_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
-    UNIQUE (text_feature_id, tconst),
+    UNIQUE (text_feature_id, tconst, feature_name, feature_version),
     UNIQUE (tconst, feature_name, feature_version, source_text_sha256)
 );
 ```
@@ -366,6 +366,8 @@ CREATE TABLE movie_embeddings (
     movie_embedding_id BIGSERIAL PRIMARY KEY,
     text_feature_id BIGINT NOT NULL REFERENCES movie_text_features(text_feature_id),
     tconst TEXT NOT NULL REFERENCES movies(tconst),
+    feature_name TEXT NOT NULL,
+    feature_version TEXT NOT NULL,
     model_name TEXT NOT NULL,
     model_version TEXT NOT NULL,
     vector_dimension INTEGER NOT NULL,
@@ -375,8 +377,13 @@ CREATE TABLE movie_embeddings (
     embedding_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
-    FOREIGN KEY (text_feature_id, tconst)
-        REFERENCES movie_text_features(text_feature_id, tconst),
+    FOREIGN KEY (text_feature_id, tconst, feature_name, feature_version)
+        REFERENCES movie_text_features(
+            text_feature_id,
+            tconst,
+            feature_name,
+            feature_version
+        ),
     UNIQUE (text_feature_id, model_name, model_version, vector_dimension)
 );
 ```
@@ -385,6 +392,10 @@ The actual `embedding` column dimension must be fixed in the migration for the
 selected model, for example `vector(1536) NOT NULL` instead of unbounded
 `vector NOT NULL`. Keep `vector_dimension` as explicit metadata even though
 Postgres enforces the column dimension.
+
+`feature_name` and `feature_version` are copied from the referenced text feature
+row so pgvector ANN indexes can be scoped to one embedding space before the
+approximate scan runs.
 
 Vector versioning rules:
 
@@ -398,19 +409,26 @@ Vector versioning rules:
 - The loader should set old rows inactive only after the replacement rows are
   successfully written and verified.
 
-Recommended pgvector index:
+Recommended pgvector indexes should be created per configured serving embedding
+set, or the table should use equivalent partitioning by serving set. Do not use
+a single active-only ANN index across multiple feature/model/version slices.
 
 ```sql
-CREATE INDEX idx_movie_embeddings_ann
+CREATE INDEX idx_movie_embeddings_ann_recommendation_soup_v1
     ON movie_embeddings
     USING hnsw (embedding vector_cosine_ops)
-    WHERE active;
+    WHERE active
+      AND feature_name = 'recommendation_soup'
+      AND feature_version = 'v1'
+      AND model_name = 'configured-model'
+      AND model_version = 'configured-model-version'
+      AND vector_dimension = 1536;
 ```
 
 Use `ivfflat` instead of `hnsw` only if #16 chooses it deliberately for local
-resource constraints. Either way, the ANN index must be scoped to the active
-serving embedding set through query predicates on `active`, `model_name`,
-`model_version`, and `vector_dimension`.
+resource constraints. Either way, the ANN index predicate must match the active
+serving embedding set: `active`, `feature_name`, `feature_version`,
+`model_name`, `model_version`, and `vector_dimension`.
 
 ## Search and Retrieval Flow
 
@@ -464,14 +482,16 @@ WITH query_embedding AS (
     JOIN movie_text_features tf
       ON tf.text_feature_id = e.text_feature_id
      AND tf.tconst = e.tconst
+     AND tf.feature_name = e.feature_name
+     AND tf.feature_version = e.feature_version
     WHERE e.tconst = :query_tconst
       AND e.active
       AND e.model_name = :model_name
       AND e.model_version = :model_version
       AND e.vector_dimension = :vector_dimension
+      AND e.feature_name = :feature_name
+      AND e.feature_version = :feature_version
       AND tf.active
-      AND tf.feature_name = :feature_name
-      AND tf.feature_version = :feature_version
 )
 SELECT m.tconst,
        m.display_title,
@@ -485,12 +505,14 @@ JOIN movie_embeddings e
  AND e.model_name = :model_name
  AND e.model_version = :model_version
  AND e.vector_dimension = :vector_dimension
+ AND e.feature_name = :feature_name
+ AND e.feature_version = :feature_version
 JOIN movie_text_features tf
   ON tf.text_feature_id = e.text_feature_id
  AND tf.tconst = e.tconst
+ AND tf.feature_name = e.feature_name
+ AND tf.feature_version = e.feature_version
  AND tf.active
- AND tf.feature_name = :feature_name
- AND tf.feature_version = :feature_version
 JOIN movies m ON m.tconst = e.tconst
 WHERE e.tconst <> :query_tconst
   AND m.active

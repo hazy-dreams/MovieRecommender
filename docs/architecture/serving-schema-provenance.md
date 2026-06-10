@@ -42,7 +42,7 @@ Use these upsert keys:
 | Person | `nconst` when available; otherwise source-specific external ID | IMDb people use `nconst`. TMDB-only people may use a generated internal ID plus `person_external_ids`. |
 | External movie ID | `(source_name, source_id)` | Maps TMDB-like IDs to `tconst`. |
 | Credit | `(tconst, nconst, role_type, credit_order)` when `nconst` exists | If a source lacks `nconst`, use the resolved `person_id`; keep source fields for audit. |
-| Text feature | `(tconst, feature_name, feature_version)` | Example feature names: `recommendation_soup`, `plot_summary`. |
+| Text feature | `(tconst, feature_name, feature_version, source_text_sha256)` | Regenerated text for the same feature/version is a new row. |
 | Embedding | `(text_feature_id, model_name, model_version, vector_dimension)` | A changed source text/version produces a new text feature row and therefore a new embedding row. |
 | Source snapshot | `(source_name, snapshot_name, snapshot_date, content_sha256)` | Hashes distinguish different files for the same snapshot date. |
 | ETL run | generated `etl_run_id` | References all snapshots and artifacts used by the run. |
@@ -67,7 +67,12 @@ CREATE TABLE source_snapshots (
     schema_version TEXT,
     fetched_at TIMESTAMPTZ,
     notes TEXT,
-    UNIQUE (source_name, snapshot_name, snapshot_date, content_sha256)
+    UNIQUE NULLS NOT DISTINCT (
+        source_name,
+        snapshot_name,
+        snapshot_date,
+        content_sha256
+    )
 );
 ```
 
@@ -82,6 +87,14 @@ Examples:
 The hash must be computed from the exact bytes loaded or consumed. For
 decompressed TSVs, record whether the hash is for compressed or decompressed
 bytes in `notes` until the loader has a formal convention.
+
+`snapshot_date` is nullable for ad hoc artifacts such as reduced CSV files and
+API payloads. The unique constraint must treat null dates as equal so reloading
+the same `(source_name, snapshot_name, content_sha256)` without a date upserts
+the existing snapshot row instead of creating duplicate provenance records. If
+the target Postgres version cannot use `UNIQUE NULLS NOT DISTINCT`, implement
+the same behavior with an expression unique index that normalizes null dates to
+a sentinel value.
 
 ### `etl_runs`
 
@@ -269,7 +282,7 @@ CREATE TABLE movie_credits (
     source_snapshot_id BIGINT REFERENCES source_snapshots(source_snapshot_id),
     etl_run_id BIGINT REFERENCES etl_runs(etl_run_id),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (tconst, person_id, role_type, credit_order, source_name)
+    UNIQUE (tconst, person_id, role_type, credit_order)
 );
 ```
 
@@ -279,6 +292,11 @@ exist. For the current reduced CSV, director and cast lists should be loaded as
 `director`, `actor`, or `actress` where that information is known; otherwise use
 `actor` for cast names carried by the transitional artifact and retain the
 artifact provenance.
+
+`source_name` records which loader last wrote the serving credit, but it is not
+part of the serving upsert key. If the same credit is observed from multiple
+sources, attach those sources through `row_provenance` instead of duplicating the
+credit row.
 
 Recommended indexes:
 
@@ -307,8 +325,17 @@ CREATE TABLE movie_text_features (
     source_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
-    UNIQUE (tconst, feature_name, feature_version)
+    UNIQUE (text_feature_id, tconst),
+    UNIQUE (tconst, feature_name, feature_version, source_text_sha256)
 );
+```
+
+Only one text feature row should be active for a given movie feature contract:
+
+```sql
+CREATE UNIQUE INDEX idx_movie_text_features_one_active
+    ON movie_text_features (tconst, feature_name, feature_version)
+    WHERE active;
 ```
 
 Initial expected feature:
@@ -320,7 +347,10 @@ Initial expected feature:
 
 If the text construction changes, increment `feature_version`. Do not overwrite
 old text feature rows that have embeddings; mark superseded rows inactive if
-needed.
+needed. If the source movie data changes but the construction method and
+`feature_version` stay the same, insert a new inactive row with the new
+`source_text_sha256`, build replacement embeddings, then activate the new row
+and mark the older row inactive in the same transaction.
 
 ## Embeddings
 
@@ -345,6 +375,8 @@ CREATE TABLE movie_embeddings (
     embedding_etl_run_id BIGINT NOT NULL REFERENCES etl_runs(etl_run_id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     active BOOLEAN NOT NULL DEFAULT true,
+    FOREIGN KEY (text_feature_id, tconst)
+        REFERENCES movie_text_features(text_feature_id, tconst),
     UNIQUE (text_feature_id, model_name, model_version, vector_dimension)
 );
 ```
@@ -416,7 +448,8 @@ are insufficient because duplicate titles are valid.
 Recommendation retrieval should be bounded:
 
 1. Resolve the query movie by `tconst`.
-2. Load its active embedding for the configured model/version/dimension.
+2. Load its active embedding for the configured feature name/version and
+   model/version/dimension.
 3. Use pgvector ANN to fetch a limited candidate set.
 4. Exclude the query movie.
 5. Rerank or decorate candidates using movie metadata, ratings, genres, and
@@ -426,14 +459,19 @@ Expected query shape:
 
 ```sql
 WITH query_embedding AS (
-    SELECT embedding
-    FROM movie_embeddings
-    WHERE tconst = :query_tconst
-      AND active
-      AND model_name = :model_name
-      AND model_version = :model_version
-      AND vector_dimension = :vector_dimension
-    LIMIT 1
+    SELECT e.embedding
+    FROM movie_embeddings e
+    JOIN movie_text_features tf
+      ON tf.text_feature_id = e.text_feature_id
+     AND tf.tconst = e.tconst
+    WHERE e.tconst = :query_tconst
+      AND e.active
+      AND e.model_name = :model_name
+      AND e.model_version = :model_version
+      AND e.vector_dimension = :vector_dimension
+      AND tf.active
+      AND tf.feature_name = :feature_name
+      AND tf.feature_version = :feature_version
 )
 SELECT m.tconst,
        m.display_title,
@@ -447,6 +485,12 @@ JOIN movie_embeddings e
  AND e.model_name = :model_name
  AND e.model_version = :model_version
  AND e.vector_dimension = :vector_dimension
+JOIN movie_text_features tf
+  ON tf.text_feature_id = e.text_feature_id
+ AND tf.tconst = e.tconst
+ AND tf.active
+ AND tf.feature_name = :feature_name
+ AND tf.feature_version = :feature_version
 JOIN movies m ON m.tconst = e.tconst
 WHERE e.tconst <> :query_tconst
   AND m.active

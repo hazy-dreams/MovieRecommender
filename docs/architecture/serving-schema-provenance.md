@@ -433,12 +433,12 @@ Recommended pgvector indexes should be created per configured serving embedding
 set and vector dimension, or the table should use equivalent partitioning by
 serving set and dimension. Do not use a single active-only ANN index across
 multiple feature/model/version/dimension slices. Example for the
-1536-dimensional serving table or partition:
+1536-dimensional unbounded-vector serving table:
 
 ```sql
 CREATE INDEX idx_movie_embeddings_ann_recommendation_soup_v1
     ON movie_embeddings
-    USING hnsw (embedding vector_cosine_ops)
+    USING hnsw ((embedding::vector(1536)) vector_cosine_ops)
     WHERE active
       AND feature_name = 'recommendation_soup'
       AND feature_version = 'v1'
@@ -450,7 +450,10 @@ CREATE INDEX idx_movie_embeddings_ann_recommendation_soup_v1
 Use `ivfflat` instead of `hnsw` only if #16 chooses it deliberately for local
 resource constraints. Either way, the ANN index predicate must match the active
 serving embedding set: `active`, `feature_name`, `feature_version`,
-`model_name`, `model_version`, and `vector_dimension`.
+`model_name`, `model_version`, and `vector_dimension`. If the implementation
+uses unbounded `vector` storage, query distance expressions must use the same
+dimension cast as the expression index. The `1536` cast below is illustrative;
+the migration and query builder must use the configured serving dimension.
 
 ## Search and Retrieval Flow
 
@@ -499,7 +502,7 @@ Expected query shape:
 
 ```sql
 WITH query_embedding AS (
-    SELECT e.embedding
+    SELECT e.embedding::vector(1536) AS embedding
     FROM movie_embeddings e
     JOIN movie_text_features tf
       ON tf.text_feature_id = e.text_feature_id
@@ -521,7 +524,7 @@ SELECT m.tconst,
        m.primary_title,
        m.start_year,
        m.weighted_score,
-       e.embedding <=> q.embedding AS cosine_distance
+       e.embedding::vector(1536) <=> q.embedding AS cosine_distance
 FROM query_embedding q
 JOIN movie_embeddings e
   ON e.active
@@ -540,7 +543,7 @@ JOIN movie_text_features tf
 JOIN movies m ON m.tconst = e.tconst
 WHERE e.tconst <> :query_tconst
   AND m.active
-ORDER BY e.embedding <=> q.embedding,
+ORDER BY e.embedding::vector(1536) <=> q.embedding,
          m.weighted_score DESC NULLS LAST,
          m.display_title ASC,
          m.tconst ASC
@@ -590,6 +593,10 @@ SQLite preview backfill expectations:
 - Register the SQLite file as `source_name = 'sqlite_preview'`.
 - Use it only to seed `movies` and simple term-derived text features if the CSV
   is unavailable.
+- Validate every SQLite movie ID before inserting it into `movies.tconst`.
+  Accept only canonical IMDb title IDs such as `tt1234567`; reject synthetic
+  preview IDs such as `row:1` unless they have first been resolved to IMDb IDs
+  from another source.
 - Do not preserve SQLite `movie_terms` as a target table; target retrieval uses
   text features, embeddings, and Postgres indexes.
 
@@ -598,7 +605,10 @@ Raw IMDb loading expectations:
 - Register each required IMDb file as a separate `source_snapshots` row.
 - Use `title.basics` and `title.ratings` for `movies`.
 - Use `name.basics` for `people`.
-- Use `title.crew` and `title.principals` for `movie_credits`.
+- Use `title.crew` as the authoritative source for director and writer credits.
+- Use `title.principals` for ordered cast and other principal credits, but
+  dedupe directors/writers already loaded from `title.crew` before inserting
+  serving credits.
 - Preserve current reducer limits where needed for serving features: up to three
   directors and five top cast members for the first `recommendation_soup`
   version.

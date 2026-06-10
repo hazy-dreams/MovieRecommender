@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import csv
-import shutil
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -137,6 +136,7 @@ def download_sources(
     max_file_size_bytes: int = DEFAULT_MAX_FILE_SIZE_BYTES,
     chunk_size_bytes: int = DEFAULT_CHUNK_SIZE_BYTES,
     timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+    force: bool = False,
     output=sys.stdout,
 ) -> list[Path]:
     """Stream required compressed IMDb files into ``output_dir``."""
@@ -145,12 +145,13 @@ def download_sources(
     for source in REQUIRED_SOURCE_FILES:
         destination = output_dir / source.filename
         temp_path = None
-        if destination.exists():
+        if destination.exists() and not force:
             print(f"Skipping existing file: {destination}", file=output)
             downloaded_paths.append(destination)
             continue
 
-        print(f"Downloading {source.url} -> {destination}", file=output)
+        action = "Refreshing" if destination.exists() else "Downloading"
+        print(f"{action} {source.url} -> {destination}", file=output)
         try:
             with urlopen(source.url, timeout=timeout_seconds) as response:
                 length_header = response.headers.get("Content-Length")
@@ -188,7 +189,7 @@ def download_sources(
                 temp_path.unlink(missing_ok=True)
             raise
 
-        shutil.move(str(temp_path), destination)
+        temp_path.replace(destination)
         downloaded_paths.append(destination)
         print(f"Saved {destination} ({_format_bytes(destination.stat().st_size)})", file=output)
     return downloaded_paths
@@ -254,6 +255,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fail closed if any compressed download exceeds this size.",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "With --download, redownload and atomically replace existing "
+            "compressed source files."
+        ),
+    )
+    parser.add_argument(
         "--sample-rows",
         type=int,
         default=5,
@@ -267,17 +276,27 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.list:
+        if args.force:
+            parser.error("--force can only be used with --download")
         list_sources()
         return 0
     if args.dry_run:
+        if args.force:
+            parser.error("--force can only be used with --download")
         dry_run(args.output_dir)
         return 0
     if args.sample:
+        if args.force:
+            parser.error("--force can only be used with --download")
         write_sample_fixture(args.output_dir, rows_per_file=args.sample_rows)
         return 0
     if args.download:
         max_file_size_bytes = args.max_file_size_mib * 1024 * 1024
-        download_sources(args.output_dir, max_file_size_bytes=max_file_size_bytes)
+        download_sources(
+            args.output_dir,
+            max_file_size_bytes=max_file_size_bytes,
+            force=args.force,
+        )
         return 0
 
     parser.error("select exactly one mode")

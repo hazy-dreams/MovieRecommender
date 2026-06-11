@@ -3,6 +3,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if BASE_DIR not in sys.path:
@@ -16,6 +17,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, override_settings
 
 from movies.views import get_recommender, _load_existing_store, _load_recommender
+from webapp import settings as settings_module
 
 
 class RecommenderSettingsTest(SimpleTestCase):
@@ -30,6 +32,46 @@ class RecommenderSettingsTest(SimpleTestCase):
         expected_path = Path(BASE_DIR) / "movies_10.sqlite"
 
         self.assertEqual(Path(settings.RECOMMENDER_STORE_PATH), expected_path)
+
+    def test_allowed_hosts_can_be_configured_from_environment(self):
+        with patch.dict(
+            os.environ,
+            {"DJANGO_ALLOWED_HOSTS": "127.0.0.1,preview.internal,,localhost"},
+        ):
+            self.assertEqual(
+                settings_module._env_csv("DJANGO_ALLOWED_HOSTS"),
+                ["127.0.0.1", "preview.internal", "localhost"],
+            )
+
+    def test_recommender_paths_can_be_configured_from_environment(self):
+        with patch.dict(
+            os.environ,
+            {
+                "RECOMMENDER_DATASET_PATH": "data/preview/movies_preview.csv",
+                "RECOMMENDER_STORE_PATH": "data/preview/movies_preview.sqlite",
+            },
+        ):
+            self.assertEqual(
+                settings_module._env_path(
+                    "RECOMMENDER_DATASET_PATH",
+                    Path(BASE_DIR) / "movies_10.csv",
+                ),
+                Path("data/preview/movies_preview.csv"),
+            )
+            self.assertEqual(
+                settings_module._env_path(
+                    "RECOMMENDER_STORE_PATH",
+                    Path(BASE_DIR) / "movies_10.sqlite",
+                ),
+                Path("data/preview/movies_preview.sqlite"),
+            )
+
+    def test_candidate_limit_can_be_configured_from_environment(self):
+        with patch.dict(os.environ, {"RECOMMENDER_CANDIDATE_LIMIT": "250"}):
+            self.assertEqual(
+                settings_module._env_int("RECOMMENDER_CANDIDATE_LIMIT", 500),
+                250,
+            )
 
 
 class GetRecommenderTest(SimpleTestCase):

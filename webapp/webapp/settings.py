@@ -10,7 +10,36 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
+
+
+def _env_bool(name, default):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _env_csv(name, default=None):
+    value = os.environ.get(name)
+    if value is None:
+        return [] if default is None else default
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _env_path(name, default):
+    value = os.environ.get(name)
+    if not value:
+        return default
+    return Path(value).expanduser()
+
+
+def _env_int(name, default):
+    value = os.environ.get(name)
+    if not value:
+        return default
+    return int(value)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -21,12 +50,15 @@ REPO_ROOT = BASE_DIR.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-8+1*gr-ge32w&!u6*!#or6(=vufmd*d!jmg@=@0lvr)ad@n5vf"
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-8+1*gr-ge32w&!u6*!#or6(=vufmd*d!jmg@=@0lvr)ad@n5vf",
+)
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = _env_bool("DJANGO_DEBUG", True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = _env_csv("DJANGO_ALLOWED_HOSTS")
 
 
 # Application definition
@@ -124,6 +156,12 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Location of the reduced movie dataset used by the recommender
-RECOMMENDER_DATASET_PATH = REPO_ROOT / "movies_10.csv"
-RECOMMENDER_STORE_PATH = REPO_ROOT / "movies_10.sqlite"
-RECOMMENDER_CANDIDATE_LIMIT = 500
+RECOMMENDER_DATASET_PATH = _env_path(
+    "RECOMMENDER_DATASET_PATH",
+    REPO_ROOT / "movies_10.csv",
+)
+RECOMMENDER_STORE_PATH = _env_path(
+    "RECOMMENDER_STORE_PATH",
+    REPO_ROOT / "movies_10.sqlite",
+)
+RECOMMENDER_CANDIDATE_LIMIT = _env_int("RECOMMENDER_CANDIDATE_LIMIT", 500)

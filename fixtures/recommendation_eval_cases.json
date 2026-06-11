@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "scorer": "sqlite-bounded-term-overlap",
+  "description": "Tiny offline seeds for the bounded SQLite recommender path.",
+  "cases": [
+    {
+      "id": "crime-shared-terms",
+      "query": "Neon Heist",
+      "top_n": 3,
+      "expected_good": ["Midnight Crew", "Crime Alley"],
+      "expected_bad": ["Romantic Kitchen"],
+      "failure_mode": "Action/crime seeds should prefer shared cast or genre over unrelated high-level fallback titles.",
+      "notes": "Midnight Crew shares action, crime, and Mara Vale; Crime Alley shares crime."
+    },
+    {
+      "id": "scifi-adventure-cluster",
+      "query": "Space Garden",
+      "top_n": 3,
+      "expected_good": ["Galaxy Chase", "Deep Space Laughs"],
+      "expected_bad": ["Romantic Kitchen"],
+      "failure_mode": "Sci-fi/adventure recommendations should not be displaced by unrelated comedy/romance titles.",
+      "notes": "Galaxy Chase shares sci-fi, adventure, and Noah Reed; Deep Space Laughs shares sci-fi."
+    },
+    {
+      "id": "missing-title",
+      "query": "Not In Fixture",
+      "top_n": 3,
+      "expected_good": [],
+      "expected_bad": [],
+      "expected_error": "This movie is not in the dataset.",
+      "failure_mode": "Unknown titles should be reported as expected failures instead of crashing the harness.",
+      "notes": "Keeps the report honest about lookup failures."
+    }
+  ]
+}

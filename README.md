@@ -217,6 +217,36 @@ This command uses the bounded SQLite preview store by default. It does not load
 the full reduced CSV into pandas and does not build an all-pairs similarity
 matrix.
 
+## Recommendation Quality Evaluation
+
+The repo includes a tiny offline evaluation harness for the current bounded
+SQLite recommendation path. It uses:
+
+- `fixtures/recommendation_eval_movies.csv` as a small tracked movie dataset,
+- `fixtures/recommendation_eval_cases.json` as curated seed cases with
+  expected-good titles, expected-bad titles, and failure-mode notes,
+- a temporary SQLite store by default, so no generated database is written into
+  the worktree.
+
+Run it from the repository root:
+
+```bash
+make evaluate-recommendations
+```
+
+Or pass CLI options directly:
+
+```bash
+python evaluate_recommendations.py --top-n 3 --candidate-limit 250
+```
+
+The report is intentionally human-readable. `Expected-good hits` counts seed
+titles that appeared in the top-N results. `Expected-bad misses` counts titles
+that stayed out of the top-N results. `Expected errors` covers known failure
+modes, such as a missing query title. The command exits with status 0 only when
+all seed cases pass, which makes it usable in local checks or CI without adding
+a full benchmark framework.
+
 ### Future Work:
 - Make into a webapp using Django
 - Use database to provide backend data for webapp

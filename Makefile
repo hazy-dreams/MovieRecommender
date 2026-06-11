@@ -8,7 +8,7 @@ DATASET_OUTPUT ?= movies_10
 DATASET_PERCENTAGE ?= 0.90
 DATASET_MIN_VOTES ?= 1000
 
-.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset clean
+.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset evaluate-recommendations clean
 
 setup:
 	@if [ ! -x "$(VENV)/bin/python" ]; then \
@@ -44,6 +44,9 @@ imdb-bootstrap:
 
 canonical-dataset:
 	$(PYTHON) movies.py --input-dir "$(IMDB_DATA_DIR)" --percentage "$(DATASET_PERCENTAGE)" --min-votes "$(DATASET_MIN_VOTES)" --output "$(DATASET_OUTPUT)"
+
+evaluate-recommendations:
+	$(PYTHON) evaluate_recommendations.py $(ARGS)
 
 clean:
 	find . -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +

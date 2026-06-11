@@ -7,6 +7,7 @@ IMDB_BOOTSTRAP_DIR ?= data/imdb
 DATASET_OUTPUT ?= movies_10
 DATASET_PERCENTAGE ?= 0.90
 DATASET_MIN_VOTES ?= 1000
+WEB_BIND ?= 127.0.0.1:8000
 
 .PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset clean
 
@@ -34,7 +35,7 @@ test:
 	$(PYTHON) -m pytest -q
 
 run-web:
-	$(PYTHON) webapp/manage.py runserver
+	$(PYTHON) webapp/manage.py runserver $(WEB_BIND)
 
 smoke:
 	$(PYTHON) webapp/manage.py check

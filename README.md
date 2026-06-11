@@ -252,6 +252,9 @@ For a quick Django configuration check, run:
 make smoke
 ```
 
+For a private VPS preview using an SSH tunnel or trusted private network, see
+[`docs/private-vps-preview.md`](docs/private-vps-preview.md).
+
 ## Implementation reports
 
 When reporting completed implementation work, include the changed files, exact

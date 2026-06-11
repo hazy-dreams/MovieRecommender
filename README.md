@@ -62,8 +62,9 @@ This avoids the old runtime hazards:
 - raw IMDb TSVs are never read by the app runtime.
 
 The legacy `MovieRecommender` class remains in
-`src/movie_recommender/recommenders/legacy_content.py` for compatibility and
-small tests, but it should not be used for full or preview runtime serving.
+`src/movie_recommender/recommenders/legacy_content.py` for small tests and
+algorithm comparisons, but it should not be used for full or preview runtime
+serving.
 
 Build or refresh the SQLite store by running a recommendation once:
 

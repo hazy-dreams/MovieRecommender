@@ -399,28 +399,8 @@ class MovieUtilsTest(unittest.TestCase):
 
         self.assertEqual(result, ["Movie B", "Movie C"])
 
-    def test_src_package_import_is_lightweight(self) -> None:
-        """Importing src should not load pandas/sklearn until legacy classes are used."""
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-c",
-                (
-                    "import sys; import src; "
-                    "assert 'pandas' not in sys.modules; "
-                    "assert 'sklearn' not in sys.modules"
-                ),
-            ],
-            cwd=Path(__file__).resolve().parents[2],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_direct_src_path_compatibility_imports_still_work(self) -> None:
-        """Old module names should still work when PYTHONPATH points at src."""
+    def test_package_import_is_lightweight(self) -> None:
+        """Importing the package should not load pandas/sklearn eagerly."""
         repo_root = Path(__file__).resolve().parents[2]
         env = os.environ.copy()
         env["PYTHONPATH"] = str(repo_root / "src")
@@ -430,18 +410,52 @@ class MovieUtilsTest(unittest.TestCase):
                 sys.executable,
                 "-c",
                 (
-                    "from dataset_reducer import MovieDatasetReducer; "
-                    "from movie_recommender import MovieRecommender; "
-                    "from sqlite_recommender import SQLiteMovieRecommender; "
-                    "from recommendation_evaluation import evaluate_recommendations; "
-                    "from imdb_bootstrap import list_sources; "
+                    "import sys; import movie_recommender; "
+                    "assert 'pandas' not in sys.modules; "
+                    "assert 'sklearn' not in sys.modules"
+                ),
+            ],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_direct_src_path_package_imports_use_canonical_paths(self) -> None:
+        """PYTHONPATH=src should expose only canonical package imports."""
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.util; "
+                    "from movie_recommender.data.dataset_reducer import "
+                    "MovieDatasetReducer; "
+                    "from movie_recommender.recommenders.legacy_content import "
+                    "MovieRecommender; "
+                    "from movie_recommender.recommenders.sqlite_recommender import "
+                    "SQLiteMovieRecommender; "
+                    "from movie_recommender.recommenders.evaluation import "
+                    "evaluate_recommendations; "
+                    "from movie_recommender.data.imdb_bootstrap import list_sources; "
                     "assert MovieDatasetReducer.__name__ == 'MovieDatasetReducer'; "
                     "assert MovieRecommender.__name__ == 'MovieRecommender'; "
                     "assert SQLiteMovieRecommender.__name__ == "
                     "'SQLiteMovieRecommender'; "
                     "assert evaluate_recommendations.__name__ == "
                     "'evaluate_recommendations'; "
-                    "assert list_sources.__name__ == 'list_sources'"
+                    "assert list_sources.__name__ == 'list_sources'; "
+                    "old_names = ['dataset_reducer', 'sqlite_recommender', "
+                    "'recommendation_evaluation', 'imdb_bootstrap']; "
+                    "assert all(importlib.util.find_spec(name) is None "
+                    "for name in old_names)"
                 ),
             ],
             cwd="/tmp",

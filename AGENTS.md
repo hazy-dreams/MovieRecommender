@@ -107,6 +107,7 @@ For docs-only or gitignore-only changes, it is acceptable to report that tests w
 ## Coding guidance
 
 - Keep root CLI files thin; reusable logic belongs in `src/movie_recommender/` or the Django app as appropriate.
+- Use canonical imports under `movie_recommender.*`; do not add top-level shim modules under `src/`.
 - Avoid broad rewrites unless the task explicitly asks for them.
 - Prefer small, reviewable commits with a clear verification step.
 - Preserve public behavior unless the issue/plan says otherwise.

@@ -1,7 +1,14 @@
 #! python
-"""Command line interface for safe IMDb source data bootstrap."""
+"""Compatibility wrapper for the IMDb bootstrap CLI."""
 
-from src.imdb_bootstrap import main
+from pathlib import Path
+import sys
+
+SRC_DIR = Path(__file__).resolve().parent / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
+
+from movie_recommender.cli.imdb_bootstrap import main
 
 
 if __name__ == "__main__":

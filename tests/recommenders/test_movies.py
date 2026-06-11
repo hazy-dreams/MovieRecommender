@@ -12,13 +12,13 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.dataset_reducer import MovieDatasetReducer
-from src.movie_recommender import MovieRecommender
-from src.sqlite_recommender import SQLiteMovieRecommender
+from movie_recommender.data import MovieDatasetReducer
+from movie_recommender.recommenders.legacy_content import MovieRecommender
+from movie_recommender.recommenders.sqlite_recommender import SQLiteMovieRecommender
 
 
 class MovieUtilsTest(unittest.TestCase):
-    """Tests for :mod:`src.movie_recommender` and helpers."""
+    """Tests for recommender utilities and helpers."""
 
     def test_weighted_rating(self) -> None:
         """Weighted rating should combine average rating and vote count."""
@@ -297,7 +297,9 @@ class MovieUtilsTest(unittest.TestCase):
             with patch.object(
                 pd.DataFrame, "to_parquet", side_effect=ImportError("missing parquet")
             ):
-                with self.assertLogs("src.dataset_reducer", level="INFO") as logs:
+                with self.assertLogs(
+                    "movie_recommender.data.dataset_reducer", level="INFO"
+                ) as logs:
                     typed_path = reducer._write_typed_output(metadata, output_prefix)
 
         self.assertIsNone(typed_path)
@@ -724,13 +726,18 @@ class MovieUtilsTest(unittest.TestCase):
         self.assertEqual(result, ["Movie E", "Movie D"])
 
     def test_cli_imports_sqlite_recommender_directly(self) -> None:
-        """The CLI should not import src.__init__ and the old recommender stack."""
-        cli_source = (Path(__file__).resolve().parents[2] / "recommender.py").read_text(
-            encoding="utf-8"
-        )
+        """The CLI should import the packaged SQLite recommender directly."""
+        cli_source = (
+            Path(__file__).resolve().parents[2]
+            / "src"
+            / "movie_recommender"
+            / "cli"
+            / "recommender.py"
+        ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "from src.sqlite_recommender import SQLiteMovieRecommender",
+            "from movie_recommender.recommenders.sqlite_recommender import "
+            "SQLiteMovieRecommender",
             cli_source,
         )
         self.assertNotIn("from src import SQLiteMovieRecommender", cli_source)

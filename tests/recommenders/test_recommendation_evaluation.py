@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from src.recommendation_evaluation import (
+from movie_recommender.recommenders.evaluation import (
     DEFAULT_EVALUATION_CASES,
     DEFAULT_EVALUATION_DATASET,
     evaluate_recommendations,

@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.dataset_reducer import MovieDatasetReducer
-from src.imdb_bootstrap import (
+from movie_recommender.data import MovieDatasetReducer
+from movie_recommender.data.imdb_bootstrap import (
     REQUIRED_SOURCE_FILES,
     download_sources,
     dry_run,
@@ -72,7 +72,7 @@ class ImdbBootstrapTest(unittest.TestCase):
             for source in REQUIRED_SOURCE_FILES:
                 (output_dir / source.filename).write_bytes(b"existing")
 
-            with patch("src.imdb_bootstrap.urlopen") as urlopen:
+            with patch("movie_recommender.data.imdb_bootstrap.urlopen") as urlopen:
                 paths = download_sources(output_dir, output=StringIO())
 
         urlopen.assert_not_called()
@@ -87,7 +87,7 @@ class ImdbBootstrapTest(unittest.TestCase):
             output = StringIO()
 
             with patch(
-                "src.imdb_bootstrap.urlopen",
+                "movie_recommender.data.imdb_bootstrap.urlopen",
                 side_effect=lambda *args, **kwargs: FakeDownloadResponse([b"replacement"]),
             ) as urlopen:
                 paths = download_sources(output_dir, force=True, output=output)
@@ -108,7 +108,7 @@ class ImdbBootstrapTest(unittest.TestCase):
                 (output_dir / source.filename).write_bytes(b"existing")
 
             with patch(
-                "src.imdb_bootstrap.urlopen",
+                "movie_recommender.data.imdb_bootstrap.urlopen",
                 return_value=FakeDownloadResponse([b"partial"], fail_after_chunks=True),
             ):
                 with self.assertRaisesRegex(RuntimeError, "download failed"):

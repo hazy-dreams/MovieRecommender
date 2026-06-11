@@ -8,14 +8,19 @@ Use this as the working contract for AI agents touching this repo. The project i
 MovieRecommender/
 ├── movies.py                 # CLI: reduce raw IMDb TSV data into a smaller CSV
 ├── recommender.py            # CLI: load a reduced CSV and print recommendations
+├── imdb_bootstrap.py         # CLI: inspect/fetch required IMDb source files
+├── evaluate_recommendations.py # CLI: run tiny recommendation quality seeds
 ├── requirements.txt          # Python runtime/test dependencies
 ├── conftest.py               # Adds repo root to sys.path for pytest
 ├── src/
-│   ├── dataset_reducer.py    # IMDb TSV reduction and weighted-rating logic
-│   └── movie_recommender.py  # Current content-based recommender
+│   └── movie_recommender/
+│       ├── data/             # IMDb bootstrap and dataset reduction logic
+│       ├── recommenders/     # Legacy content and SQLite recommenders
+│       └── cli/              # CLI implementations used by root wrappers
+├── tests/                    # Non-Django unit tests
 └── webapp/
     ├── manage.py             # Django entrypoint
-    ├── movies/               # Django app, views, template, tests
+    ├── movies/               # Django app, views, template, Django tests
     └── webapp/               # Django settings and URL config
 ```
 
@@ -70,7 +75,9 @@ The web app reads `RECOMMENDER_DATASET_PATH` from `webapp/webapp/settings.py`; b
 
 There are tests. Not many, but enough to be offended if ignored:
 
-- `webapp/movies/test_movies.py` covers reducer/recommender utility behavior.
+- `tests/recommenders/test_movies.py` covers reducer/recommender utility behavior.
+- `tests/data/test_imdb_bootstrap.py` covers the IMDb bootstrap helper.
+- `tests/recommenders/test_recommendation_evaluation.py` covers the seed evaluation harness.
 - `webapp/movies/test_search_view.py` covers the Django search view.
 - `webapp/movies/test_views.py` covers recommender caching in the Django view layer.
 
@@ -99,7 +106,7 @@ For docs-only or gitignore-only changes, it is acceptable to report that tests w
 
 ## Coding guidance
 
-- Keep CLI files thin; reusable logic belongs in `src/` or the Django app as appropriate.
+- Keep root CLI files thin; reusable logic belongs in `src/movie_recommender/` or the Django app as appropriate.
 - Avoid broad rewrites unless the task explicitly asks for them.
 - Prefer small, reviewable commits with a clear verification step.
 - Preserve public behavior unless the issue/plan says otherwise.

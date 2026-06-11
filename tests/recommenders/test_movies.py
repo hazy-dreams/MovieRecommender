@@ -419,6 +419,40 @@ class MovieUtilsTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_direct_src_path_compatibility_imports_still_work(self) -> None:
+        """Old module names should still work when PYTHONPATH points at src."""
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "from dataset_reducer import MovieDatasetReducer; "
+                    "from movie_recommender import MovieRecommender; "
+                    "from sqlite_recommender import SQLiteMovieRecommender; "
+                    "from recommendation_evaluation import evaluate_recommendations; "
+                    "from imdb_bootstrap import list_sources; "
+                    "assert MovieDatasetReducer.__name__ == 'MovieDatasetReducer'; "
+                    "assert MovieRecommender.__name__ == 'MovieRecommender'; "
+                    "assert SQLiteMovieRecommender.__name__ == "
+                    "'SQLiteMovieRecommender'; "
+                    "assert evaluate_recommendations.__name__ == "
+                    "'evaluate_recommendations'; "
+                    "assert list_sources.__name__ == 'list_sources'"
+                ),
+            ],
+            cwd="/tmp",
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_sqlite_recommender_rebuilds_when_csv_identity_changes(self) -> None:
         """A reused store path should rebuild for a different source CSV."""
         with tempfile.TemporaryDirectory() as tmp:

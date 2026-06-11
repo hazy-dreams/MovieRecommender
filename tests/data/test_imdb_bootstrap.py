@@ -1,7 +1,10 @@
 """Tests for the safe IMDb source bootstrap helpers."""
 
 from io import StringIO
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -43,6 +46,39 @@ class FakeDownloadResponse:
 
 class ImdbBootstrapTest(unittest.TestCase):
     """Bootstrap modes should stay offline and bounded unless explicitly downloading."""
+
+    def test_bootstrap_module_import_does_not_require_pandas(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.abc\n"
+                    "import sys\n"
+                    "class BlockPandas(importlib.abc.MetaPathFinder):\n"
+                    "    def find_spec(self, fullname, path, target=None):\n"
+                    "        if fullname == 'pandas' or fullname.startswith('pandas.'):\n"
+                    "            raise ModuleNotFoundError("
+                    "\"No module named 'pandas'\", name='pandas')\n"
+                    "        return None\n"
+                    "sys.meta_path.insert(0, BlockPandas())\n"
+                    "from movie_recommender.data.imdb_bootstrap import list_sources\n"
+                    "assert 'pandas' not in sys.modules\n"
+                    "assert list_sources.__name__ == 'list_sources'"
+                ),
+            ],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_list_sources_prints_required_public_urls(self) -> None:
         output = StringIO()

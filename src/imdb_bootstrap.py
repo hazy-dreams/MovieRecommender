@@ -1,3 +1,8 @@
 """Compatibility shim for IMDb bootstrap helpers."""
 
-from .movie_recommender.data.imdb_bootstrap import *  # noqa: F403
+try:
+    from movie_recommender.data.imdb_bootstrap import *  # noqa: F403
+except ModuleNotFoundError as exc:
+    if exc.name != "movie_recommender":
+        raise
+    from .movie_recommender.data.imdb_bootstrap import *  # noqa: F403

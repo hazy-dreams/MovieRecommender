@@ -80,6 +80,29 @@ class ImdbBootstrapTest(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_cli_module_list_invokes_main(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "movie_recommender.cli.imdb_bootstrap",
+                "--list",
+            ],
+            cwd="/tmp",
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("title.basics.tsv.gz", result.stdout)
+        self.assertIn("https://datasets.imdbws.com/title.basics.tsv.gz", result.stdout)
+
     def test_list_sources_prints_required_public_urls(self) -> None:
         output = StringIO()
 

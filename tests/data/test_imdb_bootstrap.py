@@ -1,15 +1,18 @@
 """Tests for the safe IMDb source bootstrap helpers."""
 
 from io import StringIO
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import pandas as pd
 
-from src.dataset_reducer import MovieDatasetReducer
-from src.imdb_bootstrap import (
+from movie_recommender.data import MovieDatasetReducer
+from movie_recommender.data.imdb_bootstrap import (
     REQUIRED_SOURCE_FILES,
     download_sources,
     dry_run,
@@ -44,6 +47,62 @@ class FakeDownloadResponse:
 class ImdbBootstrapTest(unittest.TestCase):
     """Bootstrap modes should stay offline and bounded unless explicitly downloading."""
 
+    def test_bootstrap_module_import_does_not_require_pandas(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                (
+                    "import importlib.abc\n"
+                    "import sys\n"
+                    "class BlockPandas(importlib.abc.MetaPathFinder):\n"
+                    "    def find_spec(self, fullname, path, target=None):\n"
+                    "        if fullname == 'pandas' or fullname.startswith('pandas.'):\n"
+                    "            raise ModuleNotFoundError("
+                    "\"No module named 'pandas'\", name='pandas')\n"
+                    "        return None\n"
+                    "sys.meta_path.insert(0, BlockPandas())\n"
+                    "from movie_recommender.data.imdb_bootstrap import list_sources\n"
+                    "assert 'pandas' not in sys.modules\n"
+                    "assert list_sources.__name__ == 'list_sources'"
+                ),
+            ],
+            cwd=repo_root,
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_cli_module_list_invokes_main(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "movie_recommender.cli.imdb_bootstrap",
+                "--list",
+            ],
+            cwd="/tmp",
+            env=env,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("title.basics.tsv.gz", result.stdout)
+        self.assertIn("https://datasets.imdbws.com/title.basics.tsv.gz", result.stdout)
+
     def test_list_sources_prints_required_public_urls(self) -> None:
         output = StringIO()
 
@@ -72,7 +131,7 @@ class ImdbBootstrapTest(unittest.TestCase):
             for source in REQUIRED_SOURCE_FILES:
                 (output_dir / source.filename).write_bytes(b"existing")
 
-            with patch("src.imdb_bootstrap.urlopen") as urlopen:
+            with patch("movie_recommender.data.imdb_bootstrap.urlopen") as urlopen:
                 paths = download_sources(output_dir, output=StringIO())
 
         urlopen.assert_not_called()
@@ -87,7 +146,7 @@ class ImdbBootstrapTest(unittest.TestCase):
             output = StringIO()
 
             with patch(
-                "src.imdb_bootstrap.urlopen",
+                "movie_recommender.data.imdb_bootstrap.urlopen",
                 side_effect=lambda *args, **kwargs: FakeDownloadResponse([b"replacement"]),
             ) as urlopen:
                 paths = download_sources(output_dir, force=True, output=output)
@@ -108,7 +167,7 @@ class ImdbBootstrapTest(unittest.TestCase):
                 (output_dir / source.filename).write_bytes(b"existing")
 
             with patch(
-                "src.imdb_bootstrap.urlopen",
+                "movie_recommender.data.imdb_bootstrap.urlopen",
                 return_value=FakeDownloadResponse([b"partial"], fail_after_chunks=True),
             ):
                 with self.assertRaisesRegex(RuntimeError, "download failed"):

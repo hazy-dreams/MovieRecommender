@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TextIO
 
-from src.sqlite_recommender import SQLiteMovieRecommender
+from .sqlite_recommender import SQLiteMovieRecommender
 
 
 DEFAULT_EVALUATION_DATASET = Path("fixtures/recommendation_eval_movies.csv")

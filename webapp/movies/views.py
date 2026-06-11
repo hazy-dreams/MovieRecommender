@@ -6,7 +6,7 @@ from pathlib import Path
 from django.conf import settings
 from django.shortcuts import render
 
-from src.sqlite_recommender import SQLiteMovieRecommender
+from movie_recommender.recommenders.sqlite_recommender import SQLiteMovieRecommender
 
 
 @lru_cache(maxsize=1)

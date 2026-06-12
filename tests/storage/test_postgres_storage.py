@@ -59,6 +59,8 @@ def test_vector_query_uses_literal_serving_slice_predicates() -> None:
     assert "e.vector_dimension = 3" in sql
     assert "e.feature_name = 'recommendation_soup'" in sql
     assert "e.feature_version = 'v1'" in sql
+    assert "JOIN movies qm ON qm.tconst = e.tconst" in sql
+    assert "qm.active" in sql
     assert "%(query_tconst)s" in sql
     assert "%(candidate_limit)s" in sql
 
@@ -79,6 +81,19 @@ def test_ann_index_sql_scopes_to_configured_embedding_space() -> None:
     assert "feature_name = 'recommendation_soup'" in sql
     assert "model_name = 'local-fixture-model'" in sql
     assert "vector_dimension = 3" in sql
+
+
+def test_ann_index_rejects_dimensions_above_pgvector_hnsw_limit() -> None:
+    config = EmbeddingConfig(
+        feature_name="recommendation_soup",
+        feature_version="v1",
+        model_name="large-model",
+        model_version="v1",
+        vector_dimension=3072,
+    )
+
+    with pytest.raises(ValueError, match="HNSW"):
+        build_ann_index_sql(config)
 
 
 def test_ann_index_default_name_is_derived_from_embedding_config() -> None:
@@ -103,10 +118,25 @@ def test_ann_index_default_name_is_derived_from_embedding_config() -> None:
     second_index_name = second_sql.split()[5]
 
     assert first_index_name != second_index_name
-    assert first_index_name.startswith("idx_movie_emb_ann_recommendation_so")
-    assert second_index_name.startswith("idx_movie_emb_ann_recommendation_so")
+    assert first_index_name.startswith("idx_movie_emb_ann_recommendation_s")
+    assert second_index_name.startswith("idx_movie_emb_ann_recommendation_s")
     assert len(first_index_name) <= 63
     assert len(second_index_name) <= 63
+
+
+def test_ann_index_default_name_stays_under_postgres_identifier_limit() -> None:
+    config = EmbeddingConfig(
+        feature_name="feature_name_hits_max",
+        feature_version="version_max",
+        model_name="model-name-with-extra-characters",
+        model_version="model-version-with-extra-characters",
+        vector_dimension=2000,
+    )
+
+    sql = build_ann_index_sql(config)
+    index_name = sql.split()[5]
+
+    assert len(index_name) <= 63
 
 
 def test_fuzzy_title_query_uses_trigram_operators_and_stable_ordering() -> None:
@@ -199,6 +229,8 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     all_sql = "\n".join(sql for sql, _ in conn.cursor_obj.executed)
     assert "INSERT INTO movies" in all_sql
     assert "ON CONFLICT (tconst) DO UPDATE" in all_sql
+    assert "end_year" in all_sql
+    assert "end_year = EXCLUDED.end_year" in all_sql
     assert "UPDATE movie_text_features" in all_sql
     assert "UPDATE movie_embeddings" in all_sql
     assert "movie_embeddings.text_feature_id = movie_text_features.text_feature_id" in all_sql

@@ -9,6 +9,8 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_PATH = REPO_ROOT / "db" / "schema.sql"
+POSTGRES_IDENTIFIER_MAX_BYTES = 63
+PGVECTOR_HNSW_VECTOR_MAX_DIMENSIONS = 2000
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,8 @@ WITH query_embedding AS (
      AND tf.feature_name = e.feature_name
      AND tf.feature_version = e.feature_version
      AND tf.source_text_sha256 = e.source_text_sha256
+    JOIN movies qm ON qm.tconst = e.tconst
+     AND qm.active
     WHERE e.tconst = %(query_tconst)s
       AND e.active
       AND e.model_name = {model_name}
@@ -117,6 +121,11 @@ def build_ann_index_sql(
         index_name = _default_ann_index_name(config)
     _validate_identifier(index_name)
     dimension = _sql_dimension(config.vector_dimension)
+    if dimension > PGVECTOR_HNSW_VECTOR_MAX_DIMENSIONS:
+        raise ValueError(
+            "HNSW vector indexes support at most "
+            f"{PGVECTOR_HNSW_VECTOR_MAX_DIMENSIONS} dimensions for vector columns"
+        )
     feature_name = _sql_literal(config.feature_name)
     feature_version = _sql_literal(config.feature_version)
     model_name = _sql_literal(config.model_name)
@@ -300,12 +309,12 @@ def _upsert_movie(cur: Any, movie: dict[str, Any], etl_run_id: int) -> None:
         """
 INSERT INTO movies (
     tconst, primary_title, display_title, original_title, title_type, start_year,
-    runtime_minutes, genres, average_rating, num_votes, weighted_score,
+    end_year, runtime_minutes, genres, average_rating, num_votes, weighted_score,
     is_adult, active, first_seen_etl_run_id, last_seen_etl_run_id
 )
 VALUES (
     %(tconst)s, %(primary_title)s, %(display_title)s, %(original_title)s,
-    %(title_type)s, %(start_year)s, %(runtime_minutes)s, %(genres)s,
+    %(title_type)s, %(start_year)s, %(end_year)s, %(runtime_minutes)s, %(genres)s,
     %(average_rating)s, %(num_votes)s, %(weighted_score)s, %(is_adult)s,
     true, %(etl_run_id)s, %(etl_run_id)s
 )
@@ -315,6 +324,7 @@ ON CONFLICT (tconst) DO UPDATE SET
     original_title = EXCLUDED.original_title,
     title_type = EXCLUDED.title_type,
     start_year = EXCLUDED.start_year,
+    end_year = EXCLUDED.end_year,
     runtime_minutes = EXCLUDED.runtime_minutes,
     genres = EXCLUDED.genres,
     average_rating = EXCLUDED.average_rating,
@@ -325,7 +335,7 @@ ON CONFLICT (tconst) DO UPDATE SET
     last_seen_etl_run_id = EXCLUDED.last_seen_etl_run_id,
     updated_at = now();
 """.strip(),
-        {**movie, "etl_run_id": etl_run_id},
+        {**movie, "end_year": movie.get("end_year"), "etl_run_id": etl_run_id},
     )
 
 
@@ -573,10 +583,11 @@ def _default_ann_index_name(config: EmbeddingConfig) -> str:
         str(config.vector_dimension),
     ]
     digest = hashlib.sha256("|".join(name_parts).encode("utf-8")).hexdigest()[:12]
-    feature = _identifier_fragment(config.feature_name, max_length=18)
-    version = _identifier_fragment(config.feature_version, max_length=10)
-    dimension = _identifier_fragment(str(config.vector_dimension), max_length=6)
-    return f"idx_movie_emb_ann_{feature}_{version}_{dimension}_{digest}"
+    feature = _identifier_fragment(config.feature_name, max_length=16)
+    version = _identifier_fragment(config.feature_version, max_length=8)
+    dimension = _identifier_fragment(str(config.vector_dimension), max_length=5)
+    name = f"idx_movie_emb_ann_{feature}_{version}_{dimension}_{digest}"
+    return name[:POSTGRES_IDENTIFIER_MAX_BYTES].rstrip("_")
 
 
 def _identifier_fragment(value: str, *, max_length: int) -> str:

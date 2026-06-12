@@ -79,7 +79,16 @@ class TMDBClient:
         while True:
             try:
                 with urlopen(request, timeout=self.timeout_seconds) as response:
-                    return json.loads(response.read().decode("utf-8"))
+                    payload = json.loads(response.read().decode("utf-8"))
+                    if not isinstance(payload, dict):
+                        raise TMDBRequestError(
+                            f"TMDB response was not a JSON object: {self.BASE_URL}{path}"
+                        )
+                    return payload
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise TMDBRequestError(
+                    f"TMDB response was not valid JSON: {self.BASE_URL}{path}"
+                ) from exc
             except HTTPError as exc:
                 attempts += 1
                 if exc.code == 429 and attempts <= self.max_retries:
@@ -326,6 +335,9 @@ class TMDBMovieEnricher:
             raise
         except Exception as exc:
             result = TMDBEnrichmentResult(tconst=tconst, status="error", error=str(exc))
+
+        if result.status == "error" and cached and cached["status"] == "fetched":
+            return result
 
         self.cache.upsert(result, run_id=self.run_id)
         return result

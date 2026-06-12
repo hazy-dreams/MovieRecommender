@@ -42,6 +42,21 @@ class FakeTMDBResponse:
         return json.dumps(self.payload).encode("utf-8")
 
 
+class RawTMDBResponse:
+    def __init__(self, body: bytes) -> None:
+        self.body = body
+        self.headers = {}
+
+    def __enter__(self) -> "RawTMDBResponse":
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        return None
+
+    def read(self) -> bytes:
+        return self.body
+
+
 class FakeTMDBClient:
     def __init__(
         self,
@@ -190,6 +205,15 @@ class TMDBEnrichmentTest(unittest.TestCase):
 
         self.assertNotIn("secret-api-key", str(error.exception))
 
+    def test_malformed_json_response_is_request_failure(self) -> None:
+        with patch(
+            "movie_recommender.data.tmdb_enrichment.urlopen",
+            return_value=RawTMDBResponse(b""),
+        ):
+            client = TMDBClient("test-key", max_retries=0)
+            with self.assertRaises(TMDBRequestError):
+                client.find_by_imdb_id("tt1375666")
+
     def test_error_status_is_retried_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")
@@ -270,6 +294,43 @@ class TMDBEnrichmentTest(unittest.TestCase):
 
             row = cache.get("tt1375666")
 
+        self.assertEqual(row["status"], "fetched")
+        self.assertEqual(row["overview"], "Existing overview")
+        self.assertEqual(json.loads(row["keywords_json"]), ["dream"])
+
+    def test_force_refresh_row_error_preserves_existing_fetched_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")
+            cache.upsert(
+                TMDBEnrichmentResult(
+                    tconst="tt1375666",
+                    status="fetched",
+                    tmdb_id=27205,
+                    overview="Existing overview",
+                    keywords=("dream",),
+                    genres=("Action",),
+                )
+            )
+            client = FakeTMDBClient(
+                {
+                    "tt1375666": [
+                        {
+                            "title": "Inception",
+                            "original_title": "Inception",
+                            "release_date": "2010-07-15",
+                        }
+                    ]
+                }
+            )
+            enricher = TMDBMovieEnricher(client, cache)
+
+            result = enricher.enrich_movie(
+                {"tconst": "tt1375666", "primary_title": "Inception"},
+                force=True,
+            )
+            row = cache.get("tt1375666")
+
+        self.assertEqual(result.status, "error")
         self.assertEqual(row["status"], "fetched")
         self.assertEqual(row["overview"], "Existing overview")
         self.assertEqual(json.loads(row["keywords_json"]), ["dream"])

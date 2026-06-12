@@ -39,8 +39,8 @@ SELECT tconst, display_title, primary_title, start_year, weighted_score,
 FROM movies
 WHERE active
   AND (
-      display_title % %(query)s
-      OR primary_title % %(query)s
+      display_title %% %(query)s
+      OR primary_title %% %(query)s
   )
 ORDER BY title_similarity DESC,
          weighted_score DESC NULLS LAST,
@@ -111,8 +111,10 @@ LIMIT %(candidate_limit)s;
 def build_ann_index_sql(
     config: EmbeddingConfig,
     *,
-    index_name: str = "idx_movie_embeddings_ann_recommendation_soup_v1_local",
+    index_name: str | None = None,
 ) -> str:
+    if index_name is None:
+        index_name = _default_ann_index_name(config)
     _validate_identifier(index_name)
     dimension = _sql_dimension(config.vector_dimension)
     feature_name = _sql_literal(config.feature_name)
@@ -429,6 +431,26 @@ def _upsert_text_feature(
     source_text_sha256 = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
     cur.execute(
         """
+UPDATE movie_embeddings
+SET active = false
+FROM movie_text_features
+WHERE movie_embeddings.text_feature_id = movie_text_features.text_feature_id
+  AND movie_text_features.tconst = %(tconst)s
+  AND movie_text_features.feature_name = %(feature_name)s
+  AND movie_text_features.feature_version = %(feature_version)s
+  AND movie_text_features.source_text_sha256 <> %(source_text_sha256)s
+  AND movie_text_features.active
+  AND movie_embeddings.active;
+""".strip(),
+        {
+            "tconst": movie["tconst"],
+            "feature_name": config.feature_name,
+            "feature_version": config.feature_version,
+            "source_text_sha256": source_text_sha256,
+        },
+    )
+    cur.execute(
+        """
 UPDATE movie_text_features
 SET active = false
 WHERE tconst = %(tconst)s
@@ -540,6 +562,29 @@ def _sql_literal(value: str) -> str:
     if "\x00" in value:
         raise ValueError("SQL literals cannot contain NUL bytes")
     return "'" + value.replace("'", "''") + "'"
+
+
+def _default_ann_index_name(config: EmbeddingConfig) -> str:
+    name_parts = [
+        config.feature_name,
+        config.feature_version,
+        config.model_name,
+        config.model_version,
+        str(config.vector_dimension),
+    ]
+    digest = hashlib.sha256("|".join(name_parts).encode("utf-8")).hexdigest()[:12]
+    feature = _identifier_fragment(config.feature_name, max_length=18)
+    version = _identifier_fragment(config.feature_version, max_length=10)
+    dimension = _identifier_fragment(str(config.vector_dimension), max_length=6)
+    return f"idx_movie_emb_ann_{feature}_{version}_{dimension}_{digest}"
+
+
+def _identifier_fragment(value: str, *, max_length: int) -> str:
+    chars = [char.lower() if char.isalnum() else "_" for char in value]
+    fragment = "".join(chars).strip("_")
+    while "__" in fragment:
+        fragment = fragment.replace("__", "_")
+    return (fragment or "x")[:max_length].strip("_") or "x"
 
 
 def _validate_identifier(value: str) -> None:

@@ -81,12 +81,40 @@ def test_ann_index_sql_scopes_to_configured_embedding_space() -> None:
     assert "vector_dimension = 3" in sql
 
 
+def test_ann_index_default_name_is_derived_from_embedding_config() -> None:
+    first_config = EmbeddingConfig(
+        feature_name="recommendation_soup",
+        feature_version="v1",
+        model_name="local-fixture-model",
+        model_version="2026-06-12",
+        vector_dimension=3,
+    )
+    second_config = EmbeddingConfig(
+        feature_name="recommendation_soup",
+        feature_version="v1",
+        model_name="local-fixture-model",
+        model_version="2026-06-13",
+        vector_dimension=4,
+    )
+
+    first_sql = build_ann_index_sql(first_config)
+    second_sql = build_ann_index_sql(second_config)
+    first_index_name = first_sql.split()[5]
+    second_index_name = second_sql.split()[5]
+
+    assert first_index_name != second_index_name
+    assert first_index_name.startswith("idx_movie_emb_ann_recommendation_so")
+    assert second_index_name.startswith("idx_movie_emb_ann_recommendation_so")
+    assert len(first_index_name) <= 63
+    assert len(second_index_name) <= 63
+
+
 def test_fuzzy_title_query_uses_trigram_operators_and_stable_ordering() -> None:
     sql = render_fuzzy_title_search_sql()
 
     assert "similarity(display_title, %(query)s)" in sql
-    assert "display_title % %(query)s" in sql
-    assert "primary_title % %(query)s" in sql
+    assert "display_title %% %(query)s" in sql
+    assert "primary_title %% %(query)s" in sql
     assert "ORDER BY title_similarity DESC" in sql
     assert "tconst ASC" in sql
 
@@ -172,6 +200,8 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     assert "INSERT INTO movies" in all_sql
     assert "ON CONFLICT (tconst) DO UPDATE" in all_sql
     assert "UPDATE movie_text_features" in all_sql
+    assert "UPDATE movie_embeddings" in all_sql
+    assert "movie_embeddings.text_feature_id = movie_text_features.text_feature_id" in all_sql
     assert "active = false" in all_sql
     assert "INSERT INTO movie_text_features" in all_sql
     assert "ON CONFLICT (tconst, feature_name, feature_version, source_text_sha256)" in all_sql

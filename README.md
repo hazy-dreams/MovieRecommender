@@ -246,6 +246,26 @@ recorded as `missing`; rows that fail available title/year sanity checks are
 recorded as `ambiguous` rather than guessed. The web app and recommendation CLI
 do not call TMDB at request time.
 
+TMDB API references:
+
+- TMDB API docs: <https://developer.themoviedb.org/reference/intro/getting-started>
+- Configuration details: <https://developer.themoviedb.org/reference/configuration-details>
+- Logos and attribution: <https://www.themoviedb.org/about/logos-attribution>
+
+This repository currently uses TMDB only for offline text/data enrichment. If
+poster or image work is added later, use TMDB's configuration endpoint to resolve
+the current image base URLs and supported sizes instead of hardcoding image URL
+patterns.
+
+### TMDB attribution
+
+Every application surface that displays TMDB-sourced data or images must include
+TMDB attribution and follow TMDB's logo/brand guidance. Use the official TMDB
+logos from their attribution page where UI space allows, and include this notice
+prominently in the application or related documentation:
+
+> This product uses the TMDB API but is not endorsed or certified by TMDB.
+
 Run CLI recommendations:
 
 ```bash

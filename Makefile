@@ -4,12 +4,13 @@ PYTHON ?= $(VENV)/bin/python
 UV_CACHE_DIR ?= .uv-cache
 IMDB_DATA_DIR ?= .
 IMDB_BOOTSTRAP_DIR ?= data/imdb
+TMDB_CACHE ?= data/tmdb/tmdb_enrichment.sqlite
 DATASET_OUTPUT ?= movies_10
 DATASET_PERCENTAGE ?= 0.90
 DATASET_MIN_VOTES ?= 1000
 WEB_BIND ?= 127.0.0.1:8000
 
-.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset evaluate-recommendations clean
+.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset tmdb-enrichment evaluate-recommendations clean
 
 setup:
 	@if [ ! -x "$(VENV)/bin/python" ]; then \
@@ -45,6 +46,9 @@ imdb-bootstrap:
 
 canonical-dataset:
 	$(PYTHON) movies.py --input-dir "$(IMDB_DATA_DIR)" --percentage "$(DATASET_PERCENTAGE)" --min-votes "$(DATASET_MIN_VOTES)" --output "$(DATASET_OUTPUT)"
+
+tmdb-enrichment:
+	$(PYTHON) tmdb_enrichment.py --input "$(DATASET_OUTPUT).csv" --cache "$(TMDB_CACHE)" $(ARGS)
 
 evaluate-recommendations:
 	$(PYTHON) evaluate_recommendations.py $(ARGS)

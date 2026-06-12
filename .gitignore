@@ -17,7 +17,7 @@ webapp/db.sqlite3
 movies_*.csv
 movies_*.parquet
 movies_*.sqlite
-data/
+/data/
 imdb-data/
 *.tsv
 *.tsv.gz

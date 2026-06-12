@@ -112,10 +112,15 @@ class TMDBClient:
             f"/find/{quote(tconst)}",
             {"external_source": "imdb_id"},
         )
-        movie_results = data.get("movie_results") or []
+        movie_results = data.get("movie_results")
+        if movie_results is None:
+            raise TMDBRequestError("TMDB find response missing movie_results")
         if not isinstance(movie_results, list):
-            return []
-        return [result for result in movie_results if isinstance(result, dict)]
+            raise TMDBRequestError("TMDB find response movie_results was not a list")
+        valid_results = [result for result in movie_results if isinstance(result, dict)]
+        if movie_results and not valid_results:
+            raise TMDBRequestError("TMDB find response had no valid movie results")
+        return valid_results
 
     def movie_details(self, tmdb_id: int) -> dict[str, object]:
         """Fetch TMDB movie details plus keyword names."""

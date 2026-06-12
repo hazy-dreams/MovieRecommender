@@ -214,6 +214,22 @@ class TMDBEnrichmentTest(unittest.TestCase):
             with self.assertRaises(TMDBRequestError):
                 client.find_by_imdb_id("tt1375666")
 
+    def test_malformed_find_movie_results_are_request_failures(self) -> None:
+        payloads = [
+            {"movie_results": {"id": 27205}},
+            {"movie_results": ["not-a-result"]},
+        ]
+
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                with patch(
+                    "movie_recommender.data.tmdb_enrichment.urlopen",
+                    return_value=FakeTMDBResponse(payload),
+                ):
+                    client = TMDBClient("test-key", max_retries=0)
+                    with self.assertRaises(TMDBRequestError):
+                        client.find_by_imdb_id("tt1375666")
+
     def test_error_status_is_retried_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")

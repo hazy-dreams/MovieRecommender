@@ -118,8 +118,8 @@ class TMDBClient:
         if not isinstance(movie_results, list):
             raise TMDBRequestError("TMDB find response movie_results was not a list")
         valid_results = [result for result in movie_results if isinstance(result, dict)]
-        if movie_results and not valid_results:
-            raise TMDBRequestError("TMDB find response had no valid movie results")
+        if len(valid_results) != len(movie_results):
+            raise TMDBRequestError("TMDB find response had malformed movie results")
         return valid_results
 
     def movie_details(self, tmdb_id: int) -> dict[str, object]:
@@ -479,6 +479,8 @@ def _select_candidate(
 ) -> dict[str, object] | None:
     if not candidates:
         return None
+    if len(candidates) == 1:
+        return candidates[0]
 
     input_title = _input_title(row)
     input_year = _input_year(row)

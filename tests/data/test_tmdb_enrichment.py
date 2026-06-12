@@ -148,6 +148,12 @@ class TMDBEnrichmentTest(unittest.TestCase):
                             "title": "Wrong Movie",
                             "original_title": "Wrong Movie",
                             "release_date": "2001-01-01",
+                        },
+                        {
+                            "id": 2,
+                            "title": "Another Wrong Movie",
+                            "original_title": "Another Wrong Movie",
+                            "release_date": "2002-01-01",
                         }
                     ],
                 }
@@ -218,6 +224,7 @@ class TMDBEnrichmentTest(unittest.TestCase):
         payloads = [
             {"movie_results": {"id": 27205}},
             {"movie_results": ["not-a-result"]},
+            {"movie_results": [{"id": 27205}, "not-a-result"]},
         ]
 
         for payload in payloads:
@@ -229,6 +236,40 @@ class TMDBEnrichmentTest(unittest.TestCase):
                     client = TMDBClient("test-key", max_retries=0)
                     with self.assertRaises(TMDBRequestError):
                         client.find_by_imdb_id("tt1375666")
+
+    def test_unique_imdb_find_result_is_authoritative_despite_title_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")
+            client = FakeTMDBClient(
+                {
+                    "tt1375666": [
+                        {
+                            "id": 27205,
+                            "title": "Origine",
+                            "original_title": "Origine",
+                            "release_date": "2011-01-01",
+                        }
+                    ]
+                },
+                {
+                    27205: {
+                        "id": 27205,
+                        "imdb_id": "tt1375666",
+                        "title": "Origine",
+                        "original_title": "Origine",
+                        "release_date": "2011-01-01",
+                    }
+                },
+            )
+            enricher = TMDBMovieEnricher(client, cache)
+
+            result = enricher.enrich_movie(
+                {"tconst": "tt1375666", "primary_title": "Inception", "startYear": "2010"}
+            )
+
+        self.assertEqual(result.status, "fetched")
+        self.assertEqual(result.tmdb_id, 27205)
+        self.assertEqual(client.details_calls, [27205])
 
     def test_error_status_is_retried_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

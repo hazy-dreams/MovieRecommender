@@ -96,6 +96,20 @@ def test_ann_index_rejects_dimensions_above_pgvector_hnsw_limit() -> None:
         build_ann_index_sql(config)
 
 
+def test_ann_index_rejects_oversized_custom_index_names() -> None:
+    config = EmbeddingConfig(
+        feature_name="recommendation_soup",
+        feature_version="v1",
+        model_name="local-fixture-model",
+        model_version="2026-06-12",
+        vector_dimension=3,
+    )
+    index_name = "idx_" + ("a" * 64)
+
+    with pytest.raises(ValueError, match="63"):
+        build_ann_index_sql(config, index_name=index_name)
+
+
 def test_ann_index_default_name_is_derived_from_embedding_config() -> None:
     first_config = EmbeddingConfig(
         feature_name="recommendation_soup",
@@ -263,6 +277,8 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     assert "active = false" in all_sql
     assert "DELETE FROM movie_credits" in all_sql
     assert "INSERT INTO movie_text_features" in all_sql
+    assert "WHERE movie_credits.source_name = 'tiny_fixture'" in all_sql
+    assert "source_name = EXCLUDED.source_name" not in all_sql
     assert "ON CONFLICT (tconst, feature_name, feature_version, source_text_sha256)" in all_sql
     assert "INSERT INTO movie_embeddings" in all_sql
     assert "ON CONFLICT (text_feature_id, model_name, model_version, vector_dimension)" in all_sql

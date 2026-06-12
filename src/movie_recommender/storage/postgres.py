@@ -489,10 +489,10 @@ ON CONFLICT (tconst, person_id, role_type, credit_order) DO UPDATE SET
     category = EXCLUDED.category,
     job = EXCLUDED.job,
     character_names = EXCLUDED.character_names,
-    source_name = EXCLUDED.source_name,
     source_snapshot_id = EXCLUDED.source_snapshot_id,
     etl_run_id = EXCLUDED.etl_run_id,
-    updated_at = now();
+    updated_at = now()
+WHERE movie_credits.source_name = 'tiny_fixture';
 """.strip(),
         {
             **credit,
@@ -675,5 +675,10 @@ def _identifier_fragment(value: str, *, max_length: int) -> str:
 
 
 def _validate_identifier(value: str) -> None:
+    if len(value.encode("utf-8")) > POSTGRES_IDENTIFIER_MAX_BYTES:
+        raise ValueError(
+            "SQL identifiers must be no more than "
+            f"{POSTGRES_IDENTIFIER_MAX_BYTES} UTF-8 bytes"
+        )
     if not value.replace("_", "").isalnum() or value[0].isdigit():
         raise ValueError(f"invalid SQL identifier: {value!r}")

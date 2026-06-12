@@ -208,6 +208,44 @@ You can override the artifact prefix and filter settings:
 make canonical-dataset IMDB_DATA_DIR=/path/to/imdb-tsvs DATASET_OUTPUT=movies_10 DATASET_PERCENTAGE=0.90 DATASET_MIN_VOTES=1000
 ```
 
+## TMDB Text Enrichment
+
+TMDB enrichment is an offline data-pipeline step for future semantic
+recommendations. It keeps IMDb `tconst` as the canonical movie ID, maps each row
+to TMDB with API v3's IMDb external ID lookup, then stores nullable plot/theme
+fields in a local SQLite artifact keyed by `tconst`.
+
+The command reads a reduced CSV such as `movies_10.csv` and writes
+`data/tmdb/tmdb_enrichment.sqlite` by default. The `data/` directory is ignored
+by git; do not commit provider caches or API credentials.
+
+Preview the local plan without credentials or network access:
+
+```bash
+python tmdb_enrichment.py --input movies_10.csv --dry-run
+```
+
+Run live enrichment only when `TMDB_API_KEY` is set in the environment:
+
+```bash
+TMDB_API_KEY=... make tmdb-enrichment DATASET_OUTPUT=movies_10
+```
+
+Useful live options:
+
+```bash
+python tmdb_enrichment.py --input movies_10.csv --limit 25 --run-id local-smoke
+python tmdb_enrichment.py --input movies_10.csv --cache data/tmdb/tmdb_enrichment.sqlite --force
+```
+
+The cache tracks `fetched`, `missing`, `ambiguous`, and `error` statuses with
+TMDB provenance (`source=tmdb`, `source_api_version=v3`, language, fetched
+timestamp, run ID, and payload hash). Existing final-status rows are skipped by
+default so interrupted runs can resume. Rows with no TMDB movie result are
+recorded as `missing`; rows that fail available title/year sanity checks are
+recorded as `ambiguous` rather than guessed. The web app and recommendation CLI
+do not call TMDB at request time.
+
 Run CLI recommendations:
 
 ```bash

@@ -130,7 +130,7 @@ CREATE TABLE IF NOT EXISTS movie_credits (
     source_snapshot_id BIGINT REFERENCES source_snapshots(source_snapshot_id),
     etl_run_id BIGINT REFERENCES etl_runs(etl_run_id),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (tconst, person_id, role_type, credit_order)
+    UNIQUE (tconst, person_id, role_type, credit_order, source_name)
 );
 
 CREATE INDEX IF NOT EXISTS idx_movie_credits_tconst_role

@@ -198,7 +198,6 @@ def load_fixture(conn: Any, fixture: dict[str, Any], config: EmbeddingConfig) ->
         cur,
         active_tconsts=[movie["tconst"] for movie in fixture["movies"]],
         loader_name=fixture["etl_run"]["loader_name"],
-        etl_run_id=etl_run_id,
     )
 
     people_by_nconst: dict[str, int] = {}
@@ -299,12 +298,10 @@ def _deactivate_missing_fixture_movies(
     *,
     active_tconsts: list[str],
     loader_name: str,
-    etl_run_id: int,
 ) -> None:
     params = {
         "active_tconsts": active_tconsts,
         "loader_name": loader_name,
-        "etl_run_id": etl_run_id,
     }
     cur.execute(
         """
@@ -337,7 +334,6 @@ WHERE movie_text_features.tconst = movies.tconst
         """
 UPDATE movies
 SET active = false,
-    last_seen_etl_run_id = %(etl_run_id)s,
     updated_at = now()
 FROM etl_runs
 WHERE movies.last_seen_etl_run_id = etl_runs.etl_run_id
@@ -485,7 +481,7 @@ VALUES (
     %(character_names)s, %(credit_order)s, 'tiny_fixture',
     %(source_snapshot_id)s, %(etl_run_id)s
 )
-ON CONFLICT (tconst, person_id, role_type, credit_order) DO UPDATE SET
+ON CONFLICT (tconst, person_id, role_type, credit_order, source_name) DO UPDATE SET
     category = EXCLUDED.category,
     job = EXCLUDED.job,
     character_names = EXCLUDED.character_names,

@@ -38,8 +38,15 @@ def test_schema_defines_serving_contract_tables_and_extensions() -> None:
         assert f"CREATE TABLE IF NOT EXISTS {table_name}" in schema_sql
 
     assert "UNIQUE NULLS NOT DISTINCT" in schema_sql
+    assert "UNIQUE (tconst, person_id, role_type, credit_order, source_name)" in schema_sql
     assert "gin_trgm_ops" in schema_sql
     assert "CHECK (vector_dims(embedding) = vector_dimension)" in schema_sql
+
+
+def test_docker_compose_binds_postgres_to_localhost() -> None:
+    compose_yaml = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    assert '"127.0.0.1:54329:5432"' in compose_yaml
 
 
 def test_vector_query_uses_literal_serving_slice_predicates() -> None:
@@ -271,6 +278,7 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     assert "end_year = EXCLUDED.end_year" in all_sql
     assert "UPDATE movies" in all_sql
     assert "tconst <> ALL(%(active_tconsts)s::text[])" in all_sql
+    assert "last_seen_etl_run_id = %(etl_run_id)s" not in all_sql
     assert "UPDATE movie_text_features" in all_sql
     assert "UPDATE movie_embeddings" in all_sql
     assert "movie_embeddings.text_feature_id = movie_text_features.text_feature_id" in all_sql
@@ -279,6 +287,7 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     assert "INSERT INTO movie_text_features" in all_sql
     assert "WHERE movie_credits.source_name = 'tiny_fixture'" in all_sql
     assert "source_name = EXCLUDED.source_name" not in all_sql
+    assert "ON CONFLICT (tconst, person_id, role_type, credit_order, source_name)" in all_sql
     assert "ON CONFLICT (tconst, feature_name, feature_version, source_text_sha256)" in all_sql
     assert "INSERT INTO movie_embeddings" in all_sql
     assert "ON CONFLICT (text_feature_id, model_name, model_version, vector_dimension)" in all_sql

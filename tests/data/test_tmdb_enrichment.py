@@ -419,6 +419,50 @@ class TMDBEnrichmentTest(unittest.TestCase):
         self.assertEqual(row["overview"], "Existing overview")
         self.assertEqual(json.loads(row["keywords_json"]), ["dream"])
 
+    def test_force_refresh_ambiguous_preserves_existing_fetched_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")
+            cache.upsert(
+                TMDBEnrichmentResult(
+                    tconst="tt1375666",
+                    status="fetched",
+                    tmdb_id=27205,
+                    overview="Existing overview",
+                    keywords=("dream",),
+                    genres=("Action",),
+                )
+            )
+            client = FakeTMDBClient(
+                {
+                    "tt1375666": [
+                        {
+                            "id": 1,
+                            "title": "Wrong Movie",
+                            "original_title": "Wrong Movie",
+                            "release_date": "2001-01-01",
+                        },
+                        {
+                            "id": 2,
+                            "title": "Another Wrong Movie",
+                            "original_title": "Another Wrong Movie",
+                            "release_date": "2002-01-01",
+                        },
+                    ]
+                }
+            )
+            enricher = TMDBMovieEnricher(client, cache)
+
+            result = enricher.enrich_movie(
+                {"tconst": "tt1375666", "primary_title": "Inception"},
+                force=True,
+            )
+            row = cache.get("tt1375666")
+
+        self.assertEqual(result.status, "ambiguous")
+        self.assertEqual(row["status"], "fetched")
+        self.assertEqual(row["overview"], "Existing overview")
+        self.assertEqual(json.loads(row["keywords_json"]), ["dream"])
+
     def test_cli_dry_run_does_not_require_api_key(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as tmp:

@@ -341,7 +341,7 @@ class TMDBMovieEnricher:
         except Exception as exc:
             result = TMDBEnrichmentResult(tconst=tconst, status="error", error=str(exc))
 
-        if result.status == "error" and cached and cached["status"] == "fetched":
+        if result.status in {"error", "missing"} and cached and cached["status"] == "fetched":
             return result
 
         self.cache.upsert(result, run_id=self.run_id)

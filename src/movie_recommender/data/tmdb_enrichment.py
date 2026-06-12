@@ -46,6 +46,10 @@ class TMDBEnrichmentResult:
     error: str | None = None
 
 
+class TMDBRequestError(RuntimeError):
+    """Run-level TMDB request failure."""
+
+
 class TMDBClient:
     """Small TMDB API v3 client for offline enrichment jobs."""
 
@@ -83,7 +87,7 @@ class TMDBClient:
                     delay = _parse_retry_after(retry_after, attempts)
                     self.sleep(delay)
                     continue
-                raise RuntimeError(
+                raise TMDBRequestError(
                     f"TMDB request failed with HTTP {exc.code}: {self.BASE_URL}{path}"
                 ) from exc
             except (TimeoutError, URLError) as exc:
@@ -91,7 +95,7 @@ class TMDBClient:
                 if attempts <= self.max_retries:
                     self.sleep(float(attempts))
                     continue
-                raise RuntimeError(f"TMDB request failed: {exc}") from exc
+                raise TMDBRequestError(f"TMDB request failed: {exc}") from exc
 
     def find_by_imdb_id(self, tconst: str) -> list[dict[str, object]]:
         """Map an IMDb title ID to TMDB movie results."""
@@ -318,6 +322,8 @@ class TMDBMovieEnricher:
             else:
                 details = self.client.movie_details(int(selected["id"]))
                 result = _result_from_details(tconst, details, selected)
+        except TMDBRequestError:
+            raise
         except Exception as exc:
             result = TMDBEnrichmentResult(tconst=tconst, status="error", error=str(exc))
 
@@ -416,15 +422,18 @@ def main(argv: list[str] | None = None) -> int:
     if not api_key:
         parser.error("TMDB_API_KEY is required for live TMDB enrichment")
 
-    counts = enrich_csv(
-        args.input,
-        cache_path=args.cache,
-        api_key=api_key,
-        limit=args.limit,
-        force=args.force,
-        run_id=args.run_id,
-        language=args.language,
-    )
+    try:
+        counts = enrich_csv(
+            args.input,
+            cache_path=args.cache,
+            api_key=api_key,
+            limit=args.limit,
+            force=args.force,
+            run_id=args.run_id,
+            language=args.language,
+        )
+    except TMDBRequestError as exc:
+        parser.exit(1, f"tmdb_enrichment.py: error: {exc}\n")
     print("Summary: " + ", ".join(f"{key}={counts[key]}" for key in sorted(counts)))
     return 0
 

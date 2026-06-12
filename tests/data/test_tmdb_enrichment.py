@@ -5,6 +5,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+from contextlib import redirect_stderr
+from io import StringIO
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -19,6 +21,9 @@ from movie_recommender.data.tmdb_enrichment import (
     TMDBEnrichmentCache,
     TMDBEnrichmentResult,
     TMDBMovieEnricher,
+    TMDBRequestError,
+    enrich_csv,
+    main,
 )
 
 
@@ -195,6 +200,79 @@ class TMDBEnrichmentTest(unittest.TestCase):
             result = enricher.enrich_movie({"tconst": "tt0000001", "primary_title": "Sample Movie"})
 
         self.assertEqual(result.status, "missing")
+
+    def test_tmdb_request_failure_aborts_csv_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = Path(tmp) / "movies.csv"
+            cache_path = Path(tmp) / "tmdb.sqlite"
+            with input_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["tconst", "primary_title"])
+                writer.writeheader()
+                writer.writerow({"tconst": "tt0000001", "primary_title": "Sample Movie"})
+
+            with patch.object(
+                TMDBClient,
+                "find_by_imdb_id",
+                side_effect=TMDBRequestError("TMDB request failed with HTTP 401"),
+            ):
+                with self.assertRaises(TMDBRequestError):
+                    enrich_csv(input_path, cache_path=cache_path, api_key="bad-key")
+
+            rows = TMDBEnrichmentCache(cache_path).list_rows()
+
+        self.assertEqual(rows, [])
+
+    def test_cli_exits_nonzero_on_tmdb_request_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            input_path = Path(tmp) / "movies.csv"
+            with input_path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["tconst", "primary_title"])
+                writer.writeheader()
+                writer.writerow({"tconst": "tt0000001", "primary_title": "Sample Movie"})
+
+            stderr = StringIO()
+            with patch.dict(os.environ, {"TMDB_API_KEY": "bad-key"}):
+                with patch(
+                    "movie_recommender.data.tmdb_enrichment.enrich_csv",
+                    side_effect=TMDBRequestError("TMDB request failed with HTTP 401"),
+                ):
+                    with redirect_stderr(stderr):
+                        with self.assertRaises(SystemExit) as exit_error:
+                            main(["--input", str(input_path)])
+
+        self.assertEqual(exit_error.exception.code, 1)
+        self.assertIn("TMDB request failed with HTTP 401", stderr.getvalue())
+
+    def test_force_refresh_failure_preserves_existing_fetched_row(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cache = TMDBEnrichmentCache(Path(tmp) / "tmdb.sqlite")
+            cache.upsert(
+                TMDBEnrichmentResult(
+                    tconst="tt1375666",
+                    status="fetched",
+                    tmdb_id=27205,
+                    overview="Existing overview",
+                    keywords=("dream",),
+                    genres=("Action",),
+                )
+            )
+            client = FakeTMDBClient({"tt1375666": []})
+            client.find_by_imdb_id = Mock(
+                side_effect=TMDBRequestError("TMDB request failed")
+            )
+            enricher = TMDBMovieEnricher(client, cache)
+
+            with self.assertRaises(TMDBRequestError):
+                enricher.enrich_movie(
+                    {"tconst": "tt1375666", "primary_title": "Inception"},
+                    force=True,
+                )
+
+            row = cache.get("tt1375666")
+
+        self.assertEqual(row["status"], "fetched")
+        self.assertEqual(row["overview"], "Existing overview")
+        self.assertEqual(json.loads(row["keywords_json"]), ["dream"])
 
     def test_cli_dry_run_does_not_require_api_key(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]

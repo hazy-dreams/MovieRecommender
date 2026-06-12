@@ -139,6 +139,30 @@ def test_ann_index_default_name_stays_under_postgres_identifier_limit() -> None:
     assert len(index_name) <= 63
 
 
+def test_ann_index_default_name_stays_under_postgres_byte_limit() -> None:
+    first_config = EmbeddingConfig(
+        feature_name="é" * 16,
+        feature_version="versión",
+        model_name="modelo-con-acentos",
+        model_version="versión-uno",
+        vector_dimension=2000,
+    )
+    second_config = EmbeddingConfig(
+        feature_name="é" * 16,
+        feature_version="versión",
+        model_name="modelo-con-acentos",
+        model_version="versión-dos",
+        vector_dimension=2000,
+    )
+
+    first_index_name = build_ann_index_sql(first_config).split()[5]
+    second_index_name = build_ann_index_sql(second_config).split()[5]
+
+    assert len(first_index_name.encode("utf-8")) <= 63
+    assert len(second_index_name.encode("utf-8")) <= 63
+    assert first_index_name != second_index_name
+
+
 def test_fuzzy_title_query_uses_trigram_operators_and_stable_ordering() -> None:
     sql = render_fuzzy_title_search_sql()
 
@@ -231,10 +255,13 @@ def test_load_fixture_upserts_canonical_movies_text_features_and_vectors() -> No
     assert "ON CONFLICT (tconst) DO UPDATE" in all_sql
     assert "end_year" in all_sql
     assert "end_year = EXCLUDED.end_year" in all_sql
+    assert "UPDATE movies" in all_sql
+    assert "tconst <> ALL(%(active_tconsts)s::text[])" in all_sql
     assert "UPDATE movie_text_features" in all_sql
     assert "UPDATE movie_embeddings" in all_sql
     assert "movie_embeddings.text_feature_id = movie_text_features.text_feature_id" in all_sql
     assert "active = false" in all_sql
+    assert "DELETE FROM movie_credits" in all_sql
     assert "INSERT INTO movie_text_features" in all_sql
     assert "ON CONFLICT (tconst, feature_name, feature_version, source_text_sha256)" in all_sql
     assert "INSERT INTO movie_embeddings" in all_sql

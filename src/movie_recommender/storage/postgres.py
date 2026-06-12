@@ -194,6 +194,12 @@ def load_fixture(conn: Any, fixture: dict[str, Any], config: EmbeddingConfig) ->
     source_snapshot_id = _upsert_source_snapshot(cur, fixture["source_snapshot"])
     etl_run_id = _insert_etl_run(cur, fixture["etl_run"], len(fixture["movies"]))
     _insert_etl_run_source(cur, etl_run_id, source_snapshot_id)
+    _deactivate_missing_fixture_movies(
+        cur,
+        active_tconsts=[movie["tconst"] for movie in fixture["movies"]],
+        loader_name=fixture["etl_run"]["loader_name"],
+        etl_run_id=etl_run_id,
+    )
 
     people_by_nconst: dict[str, int] = {}
     for person in fixture.get("people", []):
@@ -204,6 +210,7 @@ def load_fixture(conn: Any, fixture: dict[str, Any], config: EmbeddingConfig) ->
         _upsert_movie_external_id(cur, movie["tconst"], source_snapshot_id, etl_run_id)
         _insert_movie_provenance(cur, movie, source_snapshot_id, etl_run_id)
 
+        _delete_existing_fixture_credits(cur, movie["tconst"])
         for credit in movie.get("credits", []):
             person_id = people_by_nconst[credit["nconst"]]
             _upsert_credit(cur, movie["tconst"], person_id, credit, source_snapshot_id, etl_run_id)
@@ -284,6 +291,61 @@ VALUES (%(etl_run_id)s, %(source_snapshot_id)s, 'tiny_fixture')
 ON CONFLICT DO NOTHING;
 """.strip(),
         {"etl_run_id": etl_run_id, "source_snapshot_id": source_snapshot_id},
+    )
+
+
+def _deactivate_missing_fixture_movies(
+    cur: Any,
+    *,
+    active_tconsts: list[str],
+    loader_name: str,
+    etl_run_id: int,
+) -> None:
+    params = {
+        "active_tconsts": active_tconsts,
+        "loader_name": loader_name,
+        "etl_run_id": etl_run_id,
+    }
+    cur.execute(
+        """
+UPDATE movie_embeddings
+SET active = false
+FROM movie_text_features, movies, etl_runs
+WHERE movie_embeddings.text_feature_id = movie_text_features.text_feature_id
+  AND movie_text_features.tconst = movies.tconst
+  AND movies.last_seen_etl_run_id = etl_runs.etl_run_id
+  AND etl_runs.loader_name = %(loader_name)s
+  AND movies.tconst <> ALL(%(active_tconsts)s::text[])
+  AND movie_embeddings.active;
+""".strip(),
+        params,
+    )
+    cur.execute(
+        """
+UPDATE movie_text_features
+SET active = false
+FROM movies, etl_runs
+WHERE movie_text_features.tconst = movies.tconst
+  AND movies.last_seen_etl_run_id = etl_runs.etl_run_id
+  AND etl_runs.loader_name = %(loader_name)s
+  AND movies.tconst <> ALL(%(active_tconsts)s::text[])
+  AND movie_text_features.active;
+""".strip(),
+        params,
+    )
+    cur.execute(
+        """
+UPDATE movies
+SET active = false,
+    last_seen_etl_run_id = %(etl_run_id)s,
+    updated_at = now()
+FROM etl_runs
+WHERE movies.last_seen_etl_run_id = etl_runs.etl_run_id
+  AND etl_runs.loader_name = %(loader_name)s
+  AND movies.tconst <> ALL(%(active_tconsts)s::text[])
+  AND movies.active;
+""".strip(),
+        params,
     )
 
 
@@ -390,6 +452,17 @@ VALUES (
             "source_row_hash": source_row_hash,
             "etl_run_id": etl_run_id,
         },
+    )
+
+
+def _delete_existing_fixture_credits(cur: Any, tconst: str) -> None:
+    cur.execute(
+        """
+DELETE FROM movie_credits
+WHERE tconst = %(tconst)s
+  AND source_name = 'tiny_fixture';
+""".strip(),
+        {"tconst": tconst},
     )
 
 
@@ -591,7 +664,10 @@ def _default_ann_index_name(config: EmbeddingConfig) -> str:
 
 
 def _identifier_fragment(value: str, *, max_length: int) -> str:
-    chars = [char.lower() if char.isalnum() else "_" for char in value]
+    chars = [
+        char.lower() if char.isascii() and char.isalnum() else "_"
+        for char in value
+    ]
     fragment = "".join(chars).strip("_")
     while "__" in fragment:
         fragment = fragment.replace("__", "_")

@@ -8,8 +8,9 @@ DATASET_OUTPUT ?= movies_10
 DATASET_PERCENTAGE ?= 0.90
 DATASET_MIN_VOTES ?= 1000
 WEB_BIND ?= 127.0.0.1:8000
+DATABASE_URL ?= postgresql://movierec:movierec@127.0.0.1:54329/movierec
 
-.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset evaluate-recommendations clean
+.PHONY: setup test run-web smoke imdb-bootstrap canonical-dataset evaluate-recommendations db-up db-down db-schema db-load-tiny db-verify clean
 
 setup:
 	@if [ ! -x "$(VENV)/bin/python" ]; then \
@@ -48,6 +49,21 @@ canonical-dataset:
 
 evaluate-recommendations:
 	$(PYTHON) evaluate_recommendations.py $(ARGS)
+
+db-up:
+	docker compose up -d postgres
+
+db-down:
+	docker compose down
+
+db-schema:
+	DATABASE_URL="$(DATABASE_URL)" $(PYTHON) scripts/apply_serving_schema.py
+
+db-load-tiny:
+	DATABASE_URL="$(DATABASE_URL)" $(PYTHON) scripts/load_tiny_serving_fixture.py
+
+db-verify:
+	DATABASE_URL="$(DATABASE_URL)" $(PYTHON) scripts/verify_serving_queries.py
 
 clean:
 	find . -type d \( -name __pycache__ -o -name .pytest_cache \) -prune -exec rm -rf {} +

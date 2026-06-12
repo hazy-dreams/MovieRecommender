@@ -89,13 +89,17 @@ RECOMMENDER_CANDIDATE_LIMIT = 500
 If the SQLite store exists, the app can serve recommendations without the CSV
 being present. If neither exists, the app reports that the dataset is missing.
 
-Remaining steps toward the target architecture:
+Future serving direction, if development resumes:
 
-- move the SQLite schema into Postgres tables keyed by `tconst`,
-- replace term-overlap retrieval with pgvector ANN candidate retrieval,
-- keep the same two-stage shape: bounded retrieval first, richer rerank second,
-- expose the serving path through FastAPI after the bounded data path has been
-  validated in private preview.
+- keep the current SQLite path as the bounded local/private preview baseline,
+- use a managed Postgres provider such as Neon for pgvector serving storage rather
+  than hosting durable database state on the project/Juno VPS,
+- keep ETL and embedding generation as explicit offline jobs,
+- use a static frontend host such as Cloudflare Pages if the UI is split out,
+- choose a thin API layer only after the desired product flow is clear.
+
+Do not add infrastructure just because it is available. The current priority is
+figuring out what movie recommendation experience is actually worth building.
 
 ## Canonical Dataset Artifact
 
@@ -248,10 +252,13 @@ modes, such as a missing query title. The command exits with status 0 only when
 all seed cases pass, which makes it usable in local checks or CI without adding
 a full benchmark framework.
 
-### Future Work:
-- Make into a webapp using Django
-- Use database to provide backend data for webapp
-- Allow user to add more than one movie at a time
+## Future Work
+
+Development is paused while the product direction is reconsidered. If it resumes,
+prioritize a clear recommendation experience before adding more infrastructure.
+Likely next decisions are whether the app should remain a personal/private tool,
+what dataset size is useful, and whether the eventual UI/API split should use
+Cloudflare Pages plus a thin API over managed Postgres.
 
 Information courtesy of
 IMDb

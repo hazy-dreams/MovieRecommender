@@ -1,0 +1,112 @@
+{
+  "embedding_config": {
+    "feature_name": "recommendation_soup",
+    "feature_version": "v1",
+    "model_name": "local-fixture-model",
+    "model_version": "2026-06-12",
+    "vector_dimension": 3
+  },
+  "source_snapshot": {
+    "source_name": "reduced_csv",
+    "snapshot_name": "tiny_serving_fixture.json",
+    "snapshot_date": null,
+    "source_uri": "fixtures/storage/tiny_serving_fixture.json",
+    "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "byte_size": 2,
+    "row_count": 2,
+    "schema_version": "tiny-v1",
+    "notes": "Local development fixture for the Postgres serving schema."
+  },
+  "etl_run": {
+    "run_type": "csv_backfill",
+    "status": "succeeded",
+    "loader_name": "tiny_fixture_loader",
+    "code_version": "local",
+    "records_read": 2,
+    "parameters": {
+      "fixture": "tiny_serving_fixture"
+    }
+  },
+  "people": [
+    {
+      "nconst": "nm0000001",
+      "primary_name": "Ada Director",
+      "primary_professions": ["director"]
+    },
+    {
+      "nconst": "nm0000002",
+      "primary_name": "Grace Actor",
+      "primary_professions": ["actor"]
+    }
+  ],
+  "movies": [
+    {
+      "tconst": "tt0000001",
+      "primary_title": "Arrival",
+      "display_title": "Arrival",
+      "original_title": "Arrival",
+      "title_type": "movie",
+      "start_year": 2016,
+      "runtime_minutes": 116,
+      "genres": ["Drama", "Sci-Fi"],
+      "average_rating": 7.9,
+      "num_votes": 750000,
+      "weighted_score": 8.7,
+      "is_adult": false,
+      "source_text": "arrival drama sci-fi ada director grace actor",
+      "embedding": [1.0, 0.0, 0.0],
+      "credits": [
+        {
+          "nconst": "nm0000001",
+          "role_type": "director",
+          "category": "director",
+          "job": null,
+          "character_names": [],
+          "credit_order": 0
+        },
+        {
+          "nconst": "nm0000002",
+          "role_type": "actor",
+          "category": "actor",
+          "job": null,
+          "character_names": ["Scientist"],
+          "credit_order": 1
+        }
+      ]
+    },
+    {
+      "tconst": "tt0000002",
+      "primary_title": "Arrival",
+      "display_title": "Arrival",
+      "original_title": "The Arrival",
+      "title_type": "movie",
+      "start_year": 1996,
+      "runtime_minutes": 115,
+      "genres": ["Mystery", "Sci-Fi"],
+      "average_rating": 6.2,
+      "num_votes": 40000,
+      "weighted_score": 6.9,
+      "is_adult": false,
+      "source_text": "arrival mystery sci-fi ada director grace actor",
+      "embedding": [0.9, 0.1, 0.0],
+      "credits": [
+        {
+          "nconst": "nm0000001",
+          "role_type": "director",
+          "category": "director",
+          "job": null,
+          "character_names": [],
+          "credit_order": 0
+        },
+        {
+          "nconst": "nm0000002",
+          "role_type": "actor",
+          "category": "actor",
+          "job": null,
+          "character_names": ["Radio Host"],
+          "credit_order": 1
+        }
+      ]
+    }
+  ]
+}
